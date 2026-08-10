@@ -1,0 +1,741 @@
+@import 'tailwindcss';
+
+/*
+ * ---------------------------------------------------------------------------
+ * Theme switching
+ * ---------------------------------------------------------------------------
+ * `data-theme` is always present on <html> — the boot script in the root layout
+ * resolves a stored preference of "system" to a concrete value before first
+ * paint. That means every colour has exactly one definition per theme, and no
+ * rule has to be written twice (once for the media query, once for the class).
+ */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/*
+ * ---------------------------------------------------------------------------
+ * Brand palette
+ * ---------------------------------------------------------------------------
+ * Two institutional colours, used as accents rather than as fills:
+ *
+ *   brand-700   #013e89  XLRI blue    11.4:1 on white — safe for text and fills
+ *   green-500   #96a612  XLRI green   3.0:1 on white — a marker colour, not a
+ *                                     text colour, so it never carries copy
+ *
+ * Each ramp holds the hue and steps evenly in OKLCH, so tints stay
+ * perceptually even instead of drifting muddy at the light end.
+ */
+@theme {
+  --color-brand-50: oklch(0.971 0.013 258);
+  --color-brand-100: oklch(0.934 0.031 258);
+  --color-brand-200: oklch(0.872 0.058 258);
+  --color-brand-300: oklch(0.784 0.094 258);
+  --color-brand-400: oklch(0.672 0.128 258);
+  --color-brand-500: oklch(0.552 0.152 258);
+  --color-brand-600: oklch(0.458 0.152 258);
+  --color-brand-700: oklch(0.3792 0.1374 257.7); /* #013e89 */
+  --color-brand-800: oklch(0.322 0.113 258);
+  --color-brand-900: oklch(0.268 0.088 258);
+  --color-brand-950: oklch(0.201 0.06 258);
+
+  --color-green-50: oklch(0.972 0.026 117);
+  --color-green-100: oklch(0.941 0.056 117);
+  --color-green-200: oklch(0.888 0.093 117);
+  --color-green-300: oklch(0.82 0.126 117);
+  --color-green-500: oklch(0.689 0.1542 116.5); /* #96a612 */
+  --color-green-700: oklch(0.53 0.118 117);
+  --color-green-900: oklch(0.35 0.078 117);
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Semantic tokens — light
+ * ---------------------------------------------------------------------------
+ * Components reference these, never a raw palette step. Each status family has
+ * the same shape, so a component picks a tone without knowing the hue:
+ *
+ *   --x            solid fill      paired with --x-foreground
+ *   --x-soft       tinted fill     paired with --x-soft-foreground
+ *   --x-border     outline for the tinted variant
+ */
+:root {
+  color-scheme: light;
+
+  /* Canvas and surfaces. The page is a hair off white so that white cards
+     lift off it without needing a heavy border or drop shadow. */
+  --background: oklch(0.981 0.002 258);
+  --foreground: oklch(0.235 0.028 258);
+  --surface: oklch(1 0 0);
+  --surface-foreground: oklch(0.235 0.028 258);
+  --surface-raised: oklch(1 0 0);
+  --surface-sunken: oklch(0.968 0.004 258);
+  --surface-hover: oklch(0.972 0.005 258);
+
+  /* Text. Three weights, and all three are *text* — each one clears 4.5:1 on
+     the darkest surface it is allowed to sit on, not the lightest. A "muted"
+     colour scored only against white is how secondary copy ends up legible on
+     a card and faded everywhere else. */
+  --muted: oklch(0.966 0.004 258);
+  --muted-foreground: oklch(0.462 0.018 258); /* 7.1:1 on white */
+  --subtle-foreground: oklch(0.505 0.016 258); /* 5.9:1 on white */
+
+  /* Lines and controls */
+  --border: oklch(0.868 0.005 258);
+  --border-strong: oklch(0.545 0.01 258);
+  --input: oklch(1 0 0);
+  /* The boundary that identifies *any* control — inputs, selects, and the
+     outline on secondary buttons and menu triggers. WCAG 1.4.11 wants 3:1
+     against whatever is behind it, and the sunken panel is the worst case. */
+  --input-border: oklch(0.6 0.009 258);
+  --input-placeholder: oklch(0.52 0.014 258); /* 5.5:1 — visibly a hint, still readable */
+  --ring: oklch(0.552 0.152 258);
+
+  /* Actions */
+  --primary: oklch(0.3792 0.1374 257.7);
+  --primary-foreground: oklch(1 0 0);
+  --primary-hover: oklch(0.322 0.113 258);
+  --primary-soft: oklch(0.955 0.024 258);
+  --primary-soft-foreground: oklch(0.322 0.113 258);
+  --primary-border: oklch(0.872 0.058 258);
+
+  --secondary: oklch(1 0 0);
+  --secondary-foreground: oklch(0.29 0.022 258);
+  --secondary-hover: oklch(0.966 0.004 258);
+
+  /* XLRI green. A marker and a status accent — never body text. */
+  --accent: oklch(0.689 0.1542 116.5);
+  --accent-foreground: oklch(0.24 0.05 117);
+  --accent-soft: oklch(0.958 0.038 117);
+  --accent-soft-foreground: oklch(0.42 0.095 117);
+  --accent-border: oklch(0.874 0.096 117);
+
+  /* Status. Hue carries the meaning, but never on its own — every status in
+     the UI also has a label, and all of them have an icon. */
+  --success: oklch(0.53 0.13 152);
+  --success-foreground: oklch(1 0 0);
+  --success-soft: oklch(0.956 0.036 152);
+  --success-soft-foreground: oklch(0.4 0.1 152);
+  --success-border: oklch(0.872 0.072 152);
+
+  --warning: oklch(0.66 0.15 72);
+  --warning-foreground: oklch(0.24 0.05 72);
+  --warning-soft: oklch(0.958 0.046 82);
+  --warning-soft-foreground: oklch(0.45 0.11 62);
+  --warning-border: oklch(0.878 0.082 82);
+
+  --danger: oklch(0.55 0.19 22);
+  --danger-foreground: oklch(1 0 0);
+  --danger-soft: oklch(0.958 0.028 22);
+  --danger-soft-foreground: oklch(0.45 0.16 22);
+  --danger-border: oklch(0.878 0.064 22);
+
+  --info: oklch(0.52 0.13 245);
+  --info-foreground: oklch(1 0 0);
+  --info-soft: oklch(0.954 0.028 245);
+  --info-soft-foreground: oklch(0.4 0.11 245);
+  --info-border: oklch(0.87 0.056 245);
+
+  /* Navigation rail. Light in light mode — a dark rail against white content
+     is the single biggest reason an interface reads as "heavy". */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.235 0.028 258);
+  --sidebar-muted: oklch(0.462 0.018 258);
+  --sidebar-section: oklch(0.52 0.016 258);
+  --sidebar-border: oklch(0.868 0.005 258);
+  --sidebar-hover: oklch(0.968 0.004 258);
+  --sidebar-active: oklch(0.955 0.024 258);
+  --sidebar-active-foreground: oklch(0.322 0.113 258);
+  --sidebar-marker: oklch(0.3792 0.1374 257.7);
+
+  /* The mark sits on white already, so it needs no plate here. */
+  --logo-plate: transparent;
+  --logo-plate-pad: 0px;
+
+  /* Header bar */
+  --header: oklch(1 0 0);
+  --header-foreground: oklch(0.235 0.028 258);
+  --header-border: oklch(0.868 0.005 258);
+
+  /* Tables */
+  --table-header: oklch(0.972 0.004 258);
+  --table-header-foreground: oklch(0.4 0.018 258); /* 8.4:1 — the column names carry the grid */
+  --table-row-alt: oklch(0.988 0.002 258);
+  --table-row-hover: oklch(0.964 0.008 258);
+
+  /* Overlays, skeletons, charts */
+  --overlay: oklch(0.235 0.03 258 / 0.45);
+  --skeleton: oklch(0.888 0.006 258);
+  --chart-1: oklch(0.3792 0.1374 257.7);
+  --chart-2: oklch(0.53 0.13 152);
+  --chart-3: oklch(0.66 0.15 72);
+  --chart-4: oklch(0.55 0.19 22);
+  /* A shade darker than the brand green: as a chart fill this is a UI
+     component conveying information, so it has to clear 3:1 on the card it
+     sits on. The brand colour itself is unchanged and still used for markers. */
+  --chart-5: oklch(0.638 0.1542 116.5);
+  --chart-6: oklch(0.55 0.12 300);
+  /* The unfilled part of a meter. Too pale and a 4%-complete bar looks like an
+     empty container rather than a bar with 4% in it. */
+  --chart-track: oklch(0.872 0.006 258);
+
+  /* Elevation. Two steps only: resting cards and floating layers. */
+  --shadow-card: 0 1px 2px oklch(0.3 0.04 258 / 0.06), 0 1px 3px oklch(0.3 0.04 258 / 0.04);
+  --shadow-raised: 0 8px 24px -8px oklch(0.3 0.04 258 / 0.16), 0 2px 6px oklch(0.3 0.04 258 / 0.06);
+  --shadow-ambient: oklch(0.35 0.04 258 / 0.08);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Deep charcoal with a navy cast, not black — and surfaces that step up
+     clearly enough that a card is legible as a card. */
+  --background: oklch(0.196 0.014 258);
+  --foreground: oklch(0.965 0.004 258);
+  --surface: oklch(0.243 0.016 258);
+  --surface-foreground: oklch(0.965 0.004 258);
+  --surface-raised: oklch(0.278 0.018 258);
+  --surface-sunken: oklch(0.216 0.015 258);
+  --surface-hover: oklch(0.292 0.019 258);
+
+  --muted: oklch(0.283 0.017 258);
+  --muted-foreground: oklch(0.775 0.014 258);
+  --subtle-foreground: oklch(0.7 0.014 258);
+
+  --border: oklch(0.392 0.017 258);
+  --border-strong: oklch(0.655 0.019 258);
+  --input: oklch(0.221 0.015 258);
+  /* Scored against `--surface-raised`, not the page: an input inside a dialog
+     sits on the lightest surface the dark theme has, so that is the worst case
+     for a control outline. */
+  --input-border: oklch(0.6 0.018 258);
+  --input-placeholder: oklch(0.658 0.014 258);
+  --ring: oklch(0.7 0.13 258);
+
+  /* Lifted well above #013e89, which is far too dark to read on this canvas.
+     The deep blue stays in the logo and on light surfaces. */
+  --primary: oklch(0.655 0.145 258);
+  --primary-foreground: oklch(0.16 0.02 258);
+  --primary-hover: oklch(0.72 0.13 258);
+  --primary-soft: oklch(0.318 0.062 258);
+  --primary-soft-foreground: oklch(0.895 0.06 258);
+  --primary-border: oklch(0.43 0.09 258);
+
+  --secondary: oklch(0.278 0.018 258);
+  --secondary-foreground: oklch(0.95 0.005 258);
+  --secondary-hover: oklch(0.32 0.019 258);
+
+  --accent: oklch(0.75 0.16 117);
+  --accent-foreground: oklch(0.2 0.05 117);
+  --accent-soft: oklch(0.32 0.06 117);
+  --accent-soft-foreground: oklch(0.885 0.11 117);
+  --accent-border: oklch(0.44 0.085 117);
+
+  --success: oklch(0.7 0.14 152);
+  --success-foreground: oklch(0.17 0.04 152);
+  --success-soft: oklch(0.315 0.06 152);
+  --success-soft-foreground: oklch(0.885 0.11 152);
+  --success-border: oklch(0.43 0.08 152);
+
+  --warning: oklch(0.79 0.15 78);
+  --warning-foreground: oklch(0.2 0.05 78);
+  --warning-soft: oklch(0.335 0.06 72);
+  --warning-soft-foreground: oklch(0.895 0.11 82);
+  --warning-border: oklch(0.45 0.08 72);
+
+  --danger: oklch(0.665 0.19 22);
+  --danger-foreground: oklch(0.16 0.04 22);
+  --danger-soft: oklch(0.325 0.08 22);
+  --danger-soft-foreground: oklch(0.888 0.08 22);
+  --danger-border: oklch(0.445 0.11 22);
+
+  --info: oklch(0.7 0.13 245);
+  --info-foreground: oklch(0.16 0.03 245);
+  --info-soft: oklch(0.315 0.06 245);
+  --info-soft-foreground: oklch(0.888 0.07 245);
+  --info-border: oklch(0.43 0.08 245);
+
+  --sidebar: oklch(0.221 0.016 258);
+  --sidebar-foreground: oklch(0.965 0.004 258);
+  --sidebar-muted: oklch(0.775 0.014 258);
+  --sidebar-section: oklch(0.7 0.015 258);
+  --sidebar-border: oklch(0.372 0.017 258);
+  --sidebar-hover: oklch(0.278 0.018 258);
+  --sidebar-active: oklch(0.318 0.062 258);
+  --sidebar-active-foreground: oklch(0.925 0.05 258);
+  --sidebar-marker: oklch(0.75 0.16 117);
+
+  /* The shield is a deep navy with too little separation from this canvas, so
+     the mark gets a light field — the artwork itself is never altered. */
+  --logo-plate: oklch(0.97 0.003 258);
+  --logo-plate-pad: 5px;
+
+  --header: oklch(0.229 0.016 258);
+  --header-foreground: oklch(0.965 0.004 258);
+  --header-border: oklch(0.382 0.017 258);
+
+  --table-header: oklch(0.283 0.017 258);
+  --table-header-foreground: oklch(0.8 0.013 258);
+  --table-row-alt: oklch(0.258 0.016 258);
+  --table-row-hover: oklch(0.305 0.02 258);
+
+  --overlay: oklch(0.12 0.01 258 / 0.68);
+  --skeleton: oklch(0.355 0.017 258);
+  --chart-1: oklch(0.655 0.145 258);
+  --chart-2: oklch(0.7 0.14 152);
+  --chart-3: oklch(0.79 0.15 78);
+  --chart-4: oklch(0.665 0.19 22);
+  --chart-5: oklch(0.75 0.16 117);
+  --chart-6: oklch(0.7 0.13 300);
+  --chart-track: oklch(0.375 0.017 258);
+
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.3), 0 1px 3px oklch(0 0 0 / 0.2);
+  --shadow-raised: 0 10px 28px -10px oklch(0 0 0 / 0.6), 0 2px 8px oklch(0 0 0 / 0.35);
+  --shadow-ambient: oklch(0 0 0 / 0.45);
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Token -> utility bridge
+ * ---------------------------------------------------------------------------
+ * `inline` makes the utilities resolve to `var(--background)` directly rather
+ * than to a copy, so flipping `data-theme` re-colours everything with no
+ * rebuild and no duplicated `dark:` class on any element.
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-foreground: var(--surface-foreground);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-hover: var(--surface-hover);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-input-border: var(--input-border);
+  --color-input-placeholder: var(--input-placeholder);
+  --color-ring: var(--ring);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-foreground: var(--primary-soft-foreground);
+  --color-primary-border: var(--primary-border);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-hover: var(--secondary-hover);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-foreground: var(--accent-soft-foreground);
+  --color-accent-border: var(--accent-border);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+  --color-success-border: var(--success-border);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+  --color-warning-border: var(--warning-border);
+
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-soft-foreground: var(--danger-soft-foreground);
+  --color-danger-border: var(--danger-border);
+
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-soft: var(--info-soft);
+  --color-info-soft-foreground: var(--info-soft-foreground);
+  --color-info-border: var(--info-border);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-section: var(--sidebar-section);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-active-foreground: var(--sidebar-active-foreground);
+  --color-sidebar-marker: var(--sidebar-marker);
+
+  --color-header: var(--header);
+  --color-header-foreground: var(--header-foreground);
+  --color-header-border: var(--header-border);
+
+  --color-table-header: var(--table-header);
+  --color-table-header-foreground: var(--table-header-foreground);
+  --color-table-row-alt: var(--table-row-alt);
+  --color-table-row-hover: var(--table-row-hover);
+
+  --color-overlay: var(--overlay);
+  --color-skeleton: var(--skeleton);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-track: var(--chart-track);
+
+  /* Two card radii and nothing larger — a 16px+ corner on a data-dense panel
+     reads as consumer software, not as an institutional record system. */
+  --shadow-card: var(--shadow-card);
+  --shadow-raised: var(--shadow-raised);
+
+  --radius-card: 0.625rem;
+  --radius-control: 0.5rem;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      'Helvetica Neue',
+      sans-serif;
+    /* Slightly tighter default leading than Tailwind's, which suits dense
+       tabular screens without cramping prose. */
+    line-height: 1.5;
+    font-feature-settings: 'cv02', 'cv03', 'cv04';
+  }
+
+  /* Tailwind's `border` utility has no colour of its own; this makes the token
+     the default so a bare `border-b` is theme-aware everywhere. */
+  * {
+    border-color: var(--border);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: var(--primary-soft);
+    color: var(--primary-soft-foreground);
+  }
+
+  input,
+  textarea,
+  select {
+    color: inherit;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--input-placeholder);
+  }
+
+  /* Numbers in tables and stats line up column-wise. */
+  th,
+  td {
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer base {
+  /*
+   * The rail's width, applied before React hydrates.
+   *
+   * The boot script stamps this attribute from localStorage, so a user who
+   * collapsed the rail does not watch it snap shut on every page load. React
+   * takes over the same width a frame later via the same stored value.
+   */
+  [data-sidebar-collapsed] aside[data-app-sidebar] {
+    width: 4rem;
+  }
+}
+
+@layer components {
+  /*
+   * Typography scale.
+   * Seven roles, each used for exactly one job. Components pick a role rather
+   * than a size, which is what stops font sizes multiplying screen by screen.
+   *
+   * The `type-` prefix is load-bearing, not decoration. Tailwind generates a
+   * `text-<name>` utility for every `--color-<name>` in the theme, and emits
+   * `@layer utilities` *after* `@layer components` — so a role called
+   * `.text-secondary` was silently overridden by the utility generated from
+   * `--color-secondary`, which is the secondary *button fill*: pure white in
+   * light mode and a dark grey in dark mode. Every page description, hint and
+   * caption in the application was painted with it. `type-*` is not a namespace
+   * Tailwind generates into, so the two can no longer collide.
+   */
+  .type-page-title {
+    font-size: 1.375rem; /* 22px */
+    line-height: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -0.011em;
+  }
+
+  .type-section-title {
+    font-size: 1.0625rem; /* 17px */
+    line-height: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.006em;
+  }
+
+  .type-card-title {
+    font-size: 0.9375rem; /* 15px */
+    line-height: 1.375rem;
+    font-weight: 600;
+  }
+
+  .type-body {
+    font-size: 0.875rem; /* 14px */
+    line-height: 1.4375rem;
+  }
+
+  .type-secondary {
+    font-size: 0.8125rem; /* 13px */
+    line-height: 1.25rem;
+    color: var(--muted-foreground);
+  }
+
+  .type-caption {
+    font-size: 0.75rem; /* 12px */
+    line-height: 1.125rem;
+    color: var(--muted-foreground);
+  }
+
+  .type-overline {
+    font-size: 0.6875rem; /* 11px */
+    line-height: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--subtle-foreground);
+  }
+
+  /* Surfaces. Used on hundreds of elements, so they read better as one class
+     than as four utilities each. */
+  .surface-card {
+    background: var(--surface);
+    color: var(--surface-foreground);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+  }
+
+  .surface-sunken {
+    background: var(--surface-sunken);
+  }
+
+  .surface-overlay {
+    background: var(--surface-raised);
+    color: var(--surface-foreground);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-raised);
+  }
+
+  /* Loading placeholder. The pulse is disabled by the reduced-motion rule. */
+  .skeleton {
+    background: var(--skeleton);
+    border-radius: 0.375rem;
+    animation: skeleton-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+
+  /* Toasts enter from the corner; the reduced-motion rule flattens this. */
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .animate-toast-in {
+    animation: toast-in 0.18s ease-out both;
+  }
+
+  @keyframes overlay-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .animate-overlay-in {
+    animation: overlay-in 0.14s ease-out both;
+  }
+
+  .animate-dialog-in {
+    animation: dialog-in 0.18s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  }
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Print
+ * ---------------------------------------------------------------------------
+ * Printing any screen should yield the report on branded stationery, not a
+ * screenshot of the app. Two things achieve that: the tokens are forced back to
+ * their light values (so a dark-mode user does not print solid dark blocks and
+ * drain a cartridge), and everything that is navigation or control is removed.
+ */
+@media print {
+  :root,
+  [data-theme='dark'] {
+    color-scheme: light;
+
+    --background: #ffffff;
+    --foreground: #16181d;
+    --surface: #ffffff;
+    --surface-foreground: #16181d;
+    --surface-raised: #ffffff;
+    --surface-sunken: #f4f6f8;
+    --surface-hover: #ffffff;
+    --muted: #f4f6f8;
+    --muted-foreground: #4a5057;
+    --subtle-foreground: #5b626a;
+    --border: #c9ced4;
+    --border-strong: #a9b0b8;
+    --input: #ffffff;
+    --input-border: #a9b0b8;
+    --primary: #013e89;
+    --primary-foreground: #ffffff;
+    --primary-soft: #eaf1fb;
+    --primary-soft-foreground: #013063;
+    --primary-border: #b9cdea;
+    --accent-soft: #f2f6dd;
+    --accent-soft-foreground: #4d5709;
+    --success-soft: #e8f6ed;
+    --success-soft-foreground: #1c5732;
+    --warning-soft: #fdf3e0;
+    --warning-soft-foreground: #6b4708;
+    --danger-soft: #fdeceb;
+    --danger-soft-foreground: #7a1f18;
+    --info-soft: #eaf1fb;
+    --info-soft-foreground: #16386e;
+    --table-header: #eef1f4;
+    --table-header-foreground: #3d434a;
+    --table-row-alt: #f8f9fa;
+    --skeleton: #eef1f4;
+    --shadow-card: none;
+    --shadow-raised: none;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  /* Chrome: the rail, the top bar, and anything a reader cannot click on paper.
+     `print-hide` is the escape hatch for one-off controls inside a page. */
+  [data-print='hide'],
+  .print-hide,
+  aside[data-app-sidebar],
+  header[data-app-header],
+  button,
+  [role='menu'],
+  [role='dialog'],
+  [role='tablist'],
+  nav {
+    display: none !important;
+  }
+
+  /* Blocks that only exist on paper — the branded letterhead, mainly. */
+  [data-print='only'] {
+    display: block !important;
+  }
+
+  main,
+  [data-app-content] {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .surface-card,
+  .surface-overlay {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  /* Table containers scroll on screen; on paper they must simply flow. */
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .max-h-\[60vh\] {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr,
+  img {
+    break-inside: avoid;
+  }
+
+  a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.85em;
+    color: #5b626a;
+  }
+
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+}

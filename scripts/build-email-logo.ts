@@ -1,0 +1,155 @@
+/**
+ * Rasterises the official logo for use in email.
+ *
+ *   public/xlri-logo.svg  ->  src/lib/email/assets/xlriLogo.ts
+ *
+ * Email needs a raster. Gmail strips <img src> pointing at an SVG, Outlook
+ * renders through Word and has never supported SVG at all, and the artwork the
+ * application uses is vector-only — so the one asset the browser is happiest
+ * with is the one asset mail clients refuse. This produces the PNG they accept,
+ * from the same file, without anyone redrawing the mark.
+ *
+ * The output is a TypeScript module holding base64 rather than a file in
+ * public/. The mail path runs on the server and must work in a standalone
+ * build, in a container, and in a test process with no filesystem layout to
+ * rely on; a compiled-in constant works in all three, and a runtime
+ * `readFileSync` of public/ works reliably in none of them.
+ *
+ * Rendered at twice the size it is displayed, so it stays sharp on a phone.
+ *
+ * Run only when the artwork changes:
+ *   npx tsx --tsconfig tsconfig.scripts.json scripts/build-email-logo.ts
+ *
+ * Needs Chrome. Set CHROME_PATH if it is installed somewhere unusual.
+ */
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { LOGO_ASPECT_RATIO } from '../src/lib/branding/logoArt';
+
+const ROOT = join(__dirname, '..');
+const SOURCE = join(ROOT, 'public', 'xlri-logo.svg');
+const OUTPUT = join(ROOT, 'src', 'lib', 'email', 'assets', 'xlriLogo.ts');
+
+/** The width the logo occupies in the email, in CSS pixels. */
+const DISPLAY_WIDTH = 200;
+/** Rendered at 2x for high-density screens, then declared at 1x in the markup. */
+const SCALE = 2;
+
+const DISPLAY_HEIGHT = Math.round(DISPLAY_WIDTH / LOGO_ASPECT_RATIO);
+
+const CHROME_CANDIDATES = [
+  process.env.CHROME_PATH,
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium',
+].filter((path): path is string => Boolean(path));
+
+function findChrome(): string {
+  const found = CHROME_CANDIDATES.find((path) => existsSync(path));
+  if (found) return found;
+
+  throw new Error(
+    `Chrome not found. Looked in:\n  ${CHROME_CANDIDATES.join('\n  ')}\n` +
+      'Set CHROME_PATH to the executable.',
+  );
+}
+
+/** Width and height out of a PNG's IHDR chunk, which is always the first one. */
+function pngDimensions(png: Buffer): { width: number; height: number } {
+  const SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (!png.subarray(0, 8).equals(SIGNATURE)) throw new Error('Chrome did not produce a PNG');
+
+  return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+}
+
+function main(): void {
+  const chrome = findChrome();
+  const rasterWidth = DISPLAY_WIDTH * SCALE;
+  const rasterHeight = Math.round(DISPLAY_HEIGHT * SCALE);
+
+  const stage = mkdtempSync(join(tmpdir(), 'xlri-email-logo-'));
+
+  try {
+    // The SVG is copied beside the page so the <img> resolves as a relative
+    // file:// URL. Chrome will not read a sibling directory from a temp page.
+    writeFileSync(join(stage, 'logo.svg'), readFileSync(SOURCE));
+
+    // A white field is baked in rather than left transparent, deliberately.
+    // Several clients invert light backgrounds in dark mode; the mark is a deep
+    // navy shield that all but disappears on a dark surface. Carrying its own
+    // white field is the same answer the `plate` prop gives in the UI.
+    //
+    // `height:auto` keeps the artwork's exact ratio — a rounded pixel height
+    // would squash it by a fraction of a percent, and the point of rendering
+    // from the official file is that nothing gets distorted.
+    writeFileSync(
+      join(stage, 'page.html'),
+      `<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;padding:0;background:#ffffff;}
+img{display:block;width:${rasterWidth}px;height:auto;}
+</style></head><body><img src="logo.svg"></body></html>`,
+    );
+
+    const png = join(stage, 'logo.png');
+
+    execFileSync(
+      chrome,
+      [
+        '--headless=new',
+        '--disable-gpu',
+        '--hide-scrollbars',
+        `--screenshot=${png}`,
+        `--window-size=${rasterWidth},${rasterHeight}`,
+        pathToFileURL(join(stage, 'page.html')).href,
+      ],
+      { stdio: 'pipe' },
+    );
+
+    const bytes = readFileSync(png);
+    const actual = pngDimensions(bytes);
+
+    if (actual.width !== rasterWidth || actual.height !== rasterHeight) {
+      throw new Error(
+        `Expected a ${rasterWidth}x${rasterHeight} PNG, got ${actual.width}x${actual.height}`,
+      );
+    }
+
+    mkdirSync(join(ROOT, 'src', 'lib', 'email', 'assets'), { recursive: true });
+    writeFileSync(
+      OUTPUT,
+      `// Generated by scripts/build-email-logo.ts — do not edit by hand.
+//
+// public/xlri-logo.svg, rasterised at ${SCALE}x because no mail client renders
+// SVG. Sent as an inline CID attachment: a data: URI is stripped by Gmail and
+// blocked by Outlook, and a hosted URL needs the app to be publicly reachable
+// and still shows as a broken image until the reader allows remote content.
+
+/** PNG bytes, base64. ${(bytes.length / 1024).toFixed(1)} KB decoded. */
+export const XLRI_LOGO_PNG_BASE64 =
+  '${bytes.toString('base64')}';
+
+/** The box to declare in the markup. Outlook needs both, in pixels. */
+export const XLRI_LOGO_DISPLAY = { width: ${DISPLAY_WIDTH}, height: ${DISPLAY_HEIGHT} } as const;
+
+/** What was actually rendered, at ${SCALE}x the box above. */
+export const XLRI_LOGO_RASTER = { width: ${rasterWidth}, height: ${rasterHeight} } as const;
+`,
+    );
+
+    console.log(`Wrote ${OUTPUT}`);
+    console.log(
+      `  ${rasterWidth}x${rasterHeight} PNG, ${(bytes.length / 1024).toFixed(1)} KB ` +
+        `(${(bytes.toString('base64').length / 1024).toFixed(1)} KB as base64), ` +
+        `displayed at ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}`,
+    );
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
+}
+
+main();
