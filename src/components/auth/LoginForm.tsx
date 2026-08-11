@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Field, TextInput } from '@/components/ui/Field';
 import { FormMessage } from '@/components/ui/FormMessage';
+import { OtpInput } from '@/components/ui/OtpInput';
 import { OTP_LENGTH } from '@/lib/auth/otp';
 
 type Stage = 'EMAIL' | 'OTP';
@@ -157,19 +158,18 @@ export function LoginForm() {
         }
         required
       >
-        <TextInput
+        <OtpInput
           id="otp"
-          name="otp"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          pattern={`\\d{${OTP_LENGTH}}`}
-          maxLength={OTP_LENGTH}
-          required
-          autoFocus
-          disabled={expired}
           value={otp}
-          onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))}
-          className="text-center text-lg tracking-[0.5em]"
+          onChange={setOtp}
+          length={OTP_LENGTH}
+          disabled={expired}
+          // The server does not say which of "wrong", "expired" or "unknown"
+          // it was, so the boxes only go red when there is a message to go
+          // with them.
+          invalid={error !== null}
+          autoFocus
+          label={`${OTP_LENGTH}-digit sign-in code`}
         />
       </Field>
 

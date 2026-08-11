@@ -13,7 +13,9 @@ export const metadata: Metadata = {
   description:
     'Track student ventures, support activities, submissions and dual faculty/mentor reviews across the three-term IEV programme at XLRI Xavier School of Management.',
   applicationName: 'IEV Activity Tracker',
-  // The favicon comes from src/app/icon.svg by convention.
+  // The favicon comes from src/app/favicon.ico by convention — Next finds it
+  // by filename and emits the <link> itself, so there is nothing to declare
+  // here. Replacing the icon means replacing that file.
 };
 
 export const viewport: Viewport = {
