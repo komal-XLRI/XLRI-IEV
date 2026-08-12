@@ -19,6 +19,7 @@ const { createStudentVenture, getVentureProgress } =
   await import('@/services/ventures/studentVentureService');
 const { createSubmission } = await import('@/services/submissions/submissionService');
 const { createReview } = await import('@/services/reviews/reviewService');
+const { getPendingReviewAttempts } = await import('@/services/dashboard/dashboardService');
 
 const SUFFIX = `itest-${Date.now()}`;
 const email = (label: string) => `${label}.${SUFFIX}@example.test`;
@@ -231,6 +232,19 @@ describe('dual review over a real submission', () => {
       .exec();
     expect(record!.status).toBe('UNDER_REVIEW');
     expect(record!.completedAt).toBeNull();
+  });
+
+  // Runs here because it needs a record that is genuinely under review: the
+  // admin queue populates through the venture to reach the student, and an
+  // empty result set would not exercise that path at all.
+  it('surfaces the attempt in the admin pending-review queue, with names resolved', async () => {
+    const pending = await getPendingReviewAttempts(100);
+    const row = pending.find((entry) => entry.recordId === firstActivityRecordId);
+
+    expect(row).toBeDefined();
+    expect(row!.studentName).toBe('Integration Student');
+    expect(row!.ventureName).toBe('Integration Venture');
+    expect(row!.activityCode).toBeTruthy();
   });
 
   it('refuses a second faculty review of the same attempt', async () => {

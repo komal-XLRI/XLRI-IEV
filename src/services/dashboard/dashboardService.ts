@@ -212,15 +212,19 @@ export interface PendingReviewAttempt {
 export async function getPendingReviewAttempts(limit = 25): Promise<PendingReviewAttempt[]> {
   await connectToDatabase();
 
+  // The student is reached through the venture — an activity record has no
+  // `studentId` of its own, so the name comes from a nested populate.
   const records = await StudentVentureActivity.find({ status: 'UNDER_REVIEW' })
     .select(
-      'studentId studentVentureId ventureActivityId attemptNumber facultyReviewStatus mentorReviewStatus updatedAt',
+      'studentVentureId ventureActivityId attemptNumber facultyReviewStatus mentorReviewStatus updatedAt',
     )
-    .populate<{ studentId: { name: string } | null }>('studentId', 'name')
-    .populate<{ studentVentureId: { ventureName: string } | null }>(
-      'studentVentureId',
-      'ventureName',
-    )
+    .populate<{
+      studentVentureId: { ventureName: string; studentId: { name: string } | null } | null;
+    }>({
+      path: 'studentVentureId',
+      select: 'ventureName studentId',
+      populate: { path: 'studentId', select: 'name' },
+    })
     .populate<{
       ventureActivityId: { activityCode: string; name: string; maxAttempts: number } | null;
     }>('ventureActivityId', 'activityCode name maxAttempts')
@@ -231,7 +235,7 @@ export async function getPendingReviewAttempts(limit = 25): Promise<PendingRevie
 
   return records.map((record) => ({
     recordId: record._id.toString(),
-    studentName: record.studentId?.name ?? 'Unknown student',
+    studentName: record.studentVentureId?.studentId?.name ?? 'Unknown student',
     ventureName: record.studentVentureId?.ventureName ?? '—',
     activityCode: record.ventureActivityId?.activityCode ?? '—',
     activityName: record.ventureActivityId?.name ?? '—',
