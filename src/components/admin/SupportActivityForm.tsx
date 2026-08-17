@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+import { CalendarClock } from 'lucide-react';
 import { ActionForm } from '@/components/forms/ActionForm';
 import { SubmitButton } from '@/components/ui/Button';
 import { Field, Select, TextArea, TextInput } from '@/components/ui/Field';
@@ -7,6 +9,7 @@ import { RecordDialog } from './RecordDialog';
 import { upsertSupportActivityAction } from '@/app/actions/adminVentures';
 import { SUPPORT_SCHEDULE_TYPES } from '@/lib/constants/status';
 import { humanise } from '@/lib/utils/humanise';
+import { toDateInputValue } from '@/lib/utils/dates';
 
 interface SupportActivityView {
   _id: string;
@@ -15,6 +18,10 @@ interface SupportActivityView {
   description?: string;
   order: number;
   scheduleType: string;
+  /** Serialised to an ISO string before it crosses the RSC boundary. */
+  scheduledDate?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
 }
 
 /**
@@ -32,6 +39,10 @@ function Fields({
   existing?: SupportActivityView;
 }) {
   const suffix = existing?._id ?? 'new';
+
+  // Tracked only so the schedule hint can say the right thing; the value still
+  // posts from the select itself.
+  const [scheduleType, setScheduleType] = useState(existing?.scheduleType ?? 'INDEPENDENT');
 
   return (
     <div className="space-y-3">
@@ -79,7 +90,8 @@ function Fields({
           id={`type-${suffix}`}
           name="scheduleType"
           required
-          defaultValue={existing?.scheduleType ?? 'INDEPENDENT'}
+          value={scheduleType}
+          onChange={(event) => setScheduleType(event.target.value)}
         >
           {SUPPORT_SCHEDULE_TYPES.map((type) => (
             <option key={type} value={type}>
@@ -88,6 +100,53 @@ function Fields({
           ))}
         </Select>
       </Field>
+
+      {/* Optional, and deliberately so. An academic-session activity is
+          timetabled as a class, where the date and time already live — filling
+          these in as well would be a second answer nothing keeps in step. */}
+      <fieldset className="border-border rounded-card border p-3">
+        <legend className="type-overline px-1.5">
+          <span className="inline-flex items-center gap-1.5">
+            <CalendarClock className="size-3" aria-hidden="true" />
+            Schedule
+          </span>
+        </legend>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Date" htmlFor={`date-${suffix}`} error={fieldErrors?.scheduledDate}>
+            <TextInput
+              id={`date-${suffix}`}
+              name="scheduledDate"
+              type="date"
+              defaultValue={toDateInputValue(existing?.scheduledDate)}
+            />
+          </Field>
+
+          <Field label="Start time" htmlFor={`start-${suffix}`} error={fieldErrors?.startTime}>
+            <TextInput
+              id={`start-${suffix}`}
+              name="startTime"
+              type="time"
+              defaultValue={existing?.startTime ?? ''}
+            />
+          </Field>
+
+          <Field label="End time" htmlFor={`end-${suffix}`} error={fieldErrors?.endTime}>
+            <TextInput
+              id={`end-${suffix}`}
+              name="endTime"
+              type="time"
+              defaultValue={existing?.endTime ?? ''}
+            />
+          </Field>
+        </div>
+
+        <p className="type-caption mt-2">
+          {scheduleType === 'ACADEMIC_SESSION'
+            ? 'This activity is timetabled as a class — set its real date and time under Academic → Classes. Anything here is only a note.'
+            : 'Optional. Leave blank if this activity has no fixed date.'}
+        </p>
+      </fieldset>
 
       <Field label="Description" htmlFor={`desc-${suffix}`}>
         <TextArea

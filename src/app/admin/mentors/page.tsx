@@ -5,7 +5,7 @@ import { ImportPanel } from '@/components/import/ImportPanel';
 import { ExportMenu } from '@/components/export/ExportMenu';
 import { FilterBar } from '@/components/filters/FilterBar';
 import { mentorImport } from '@/services/import/specs';
-import { listUsers } from '@/services/users/userService';
+import { DIRECTORY_LIMIT, listUsers } from '@/services/users/userService';
 import { parseReportFilters } from '@/validators/reportFilters';
 import { USER_STATUSES } from '@/lib/constants/roles';
 import { humanise } from '@/services/export/filterLabels';
@@ -23,12 +23,12 @@ export default async function AdminMentorsPage({
   const filters = parseReportFilters(await searchParams);
 
   await connectToDatabase();
-  const { items } = await listUsers({
+  const { items, total } = await listUsers({
     role: 'MENTOR',
     q: filters.q,
     status: filters.userStatus,
     page: 1,
-    pageSize: 200,
+    pageSize: DIRECTORY_LIMIT,
   });
 
   const profiles = await MentorProfile.find({ userId: { $in: items.map((u) => u._id) } })
@@ -69,7 +69,12 @@ export default async function AdminMentorsPage({
 
       <FilterBar
         fields={[
-          { name: 'q', label: 'Search', type: 'search', placeholder: 'Name or email' },
+          {
+            name: 'q',
+            label: 'Search',
+            type: 'search',
+            placeholder: 'Name, email, company or industry',
+          },
           {
             name: 'userStatus',
             label: 'Status',
@@ -84,7 +89,7 @@ export default async function AdminMentorsPage({
         <ExportMenu dataset="mentors" />
       </FilterBar>
 
-      <UserDirectory role="MENTOR" users={users} detailLabel="Company / industry" />
+      <UserDirectory role="MENTOR" users={users} detailLabel="Company / industry" total={total} />
     </>
   );
 }

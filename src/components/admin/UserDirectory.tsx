@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/Modal';
@@ -118,10 +119,13 @@ export function UserDirectory({
   role,
   users,
   detailLabel,
+  total,
 }: {
   role: Exclude<Role, 'ADMIN'>;
   users: DirectoryUser[];
   detailLabel: string;
+  /** Matches in the database, which can exceed what one screen loads. */
+  total?: number;
 }) {
   const columns: DataColumn[] = [
     { key: 'name', header: 'Name' },
@@ -136,7 +140,24 @@ export function UserDirectory({
   const rows: DataRow[] = users.map((user) => ({
     id: user._id,
     cells: [
-      { node: <span className="font-medium">{user.name}</span>, sort: user.name, text: user.name },
+      {
+        // Only students have a file to open; faculty and mentors have no
+        // venture, activities or attendance behind their name, so linking
+        // theirs would promise a page that does not exist.
+        node:
+          role === 'STUDENT' ? (
+            <Link
+              href={`/admin/students/${user._id}`}
+              className="hover:text-primary font-medium hover:underline"
+            >
+              {user.name}
+            </Link>
+          ) : (
+            <span className="font-medium">{user.name}</span>
+          ),
+        sort: user.name,
+        text: user.name,
+      },
       {
         node: <span className="text-muted-foreground">{user.email}</span>,
         sort: user.email,
@@ -158,17 +179,36 @@ export function UserDirectory({
         sort: user.status,
         text: STATUS_LABEL[user.status] ?? user.status,
       },
-      { node: <StatusAction user={user} role={role} /> },
+      {
+        node: (
+          <div className="flex items-center justify-end gap-2">
+            {role === 'STUDENT' ? (
+              <Link
+                href={`/admin/students/${user._id}`}
+                className="text-primary text-[13px] font-medium hover:underline"
+              >
+                View
+              </Link>
+            ) : null}
+            <StatusAction user={user} role={role} />
+          </div>
+        ),
+      },
     ],
   }));
 
   const noun = ROLE_NOUN[role];
+  const truncated = total !== undefined && total > users.length;
 
   return (
     <Card>
       <CardHeader
         title="Directory"
-        description={`${users.length} ${users.length === 1 ? 'record' : 'records'}`}
+        description={
+          truncated
+            ? `Showing ${users.length} of ${total} matching records — narrow the filters to see the rest`
+            : `${users.length} ${users.length === 1 ? 'record' : 'records'}`
+        }
         action={
           <RecordDialog
             action={createUserAction}
@@ -272,13 +312,17 @@ export function UserDirectory({
         }
       />
 
+      {/* The page's own Search field queries the whole directory and covers
+          every column shown here, so a second box inside the table would only
+          narrow the rows already fetched — and disagree with the first one as
+          soon as the cohort outgrows a single screen. */}
       <DataTable
         caption={`${role.toLowerCase()} directory`}
         columns={columns}
         rows={rows}
-        searchPlaceholder="Search name, email or roll number"
-        emptyTitle={`No ${noun}s yet`}
-        emptyDescription={`Add the first ${noun} with the button above, or import a batch from CSV.`}
+        searchable={false}
+        emptyTitle={`No ${noun}s match these filters`}
+        emptyDescription={`Clear the filters above, add a ${noun} with the button, or import a batch from CSV.`}
       />
     </Card>
   );

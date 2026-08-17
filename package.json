@@ -16,6 +16,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "seed": "tsx --tsconfig tsconfig.scripts.json scripts/seed.ts",
     "seed:demo": "tsx --tsconfig tsconfig.scripts.json scripts/seed-demo.ts",
+    "seed:cohort": "tsx --tsconfig tsconfig.scripts.json scripts/seed-cohort.ts",
     "verify": "npm run typecheck && npm run lint && npm run test",
     "check:smtp": "tsx --tsconfig tsconfig.scripts.json scripts/check-smtp.ts"
   },

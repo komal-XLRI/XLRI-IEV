@@ -27,7 +27,16 @@ export default async function AdminVenturesPage({
   const filters = parseReportFilters(params);
 
   const [ventures, students, faculty, mentors, progress, options] = await Promise.all([
-    listVentures(),
+    // Reviewer and status filters are applied by the query, not to the result:
+    // matching a reviewer by the name shown in a row confuses two people who
+    // share a name, and cannot express "assigned to nobody" at all.
+    listVentures({
+      status: filters.ventureStatus,
+      facultyId: filters.facultyId,
+      mentorId: filters.mentorId,
+      termId: filters.termId,
+      q: filters.q,
+    }),
     listStudentsWithoutVenture(),
     listReviewersByRole('FACULTY'),
     listReviewersByRole('MENTOR'),
@@ -39,41 +48,28 @@ export default async function AdminVenturesPage({
 
   const progressById = new Map(progress.map((row) => [row.studentVentureId, row]));
 
-  const rows: VentureRow[] = ventures
-    .map((venture) => {
-      const id = venture._id.toString();
-      const stats = progressById.get(id);
+  const rows: VentureRow[] = ventures.map((venture) => {
+    const id = venture._id.toString();
+    const stats = progressById.get(id);
 
-      return {
-        id,
-        studentName: venture.studentId?.name ?? 'Unknown',
-        studentEmail: venture.studentId?.email ?? '',
-        ventureName: venture.ventureName,
-        industry: venture.industry ?? null,
-        targetMarket: venture.targetMarket ?? null,
-        facultyName: venture.facultyId?.name ?? null,
-        mentorName: venture.mentorId?.name ?? null,
-        currentActivity: venture.currentVentureActivityId
-          ? `${venture.currentVentureActivityId.activityCode} · ${venture.currentVentureActivityId.name}`
-          : null,
-        completed: stats?.completed ?? 0,
-        total: stats?.total ?? 0,
-        percentage: stats?.percentage ?? 0,
-        status: venture.status,
-      };
-    })
-    .filter((row) => {
-      if (filters.ventureStatus && row.status !== filters.ventureStatus) return false;
-      if (filters.facultyId) {
-        const match = faculty.find((person) => person._id.toString() === filters.facultyId);
-        if (!match || row.facultyName !== match.name) return false;
-      }
-      if (filters.mentorId) {
-        const match = mentors.find((person) => person._id.toString() === filters.mentorId);
-        if (!match || row.mentorName !== match.name) return false;
-      }
-      return true;
-    });
+    return {
+      id,
+      studentName: venture.studentId?.name ?? 'Unknown',
+      studentEmail: venture.studentId?.email ?? '',
+      ventureName: venture.ventureName,
+      industry: venture.industry ?? null,
+      targetMarket: venture.targetMarket ?? null,
+      facultyName: venture.facultyId?.name ?? null,
+      mentorName: venture.mentorId?.name ?? null,
+      currentActivity: venture.currentVentureActivityId
+        ? `${venture.currentVentureActivityId.activityCode} · ${venture.currentVentureActivityId.name}`
+        : null,
+      completed: stats?.completed ?? 0,
+      total: stats?.total ?? 0,
+      percentage: stats?.percentage ?? 0,
+      status: venture.status,
+    };
+  });
 
   const unassigned = rows.filter((row) => !row.facultyName || !row.mentorName).length;
   const active = rows.filter((row) => row.status === 'ACTIVE').length;
@@ -124,6 +120,12 @@ export default async function AdminVenturesPage({
 
       <FilterBar
         fields={[
+          {
+            name: 'q',
+            label: 'Search',
+            type: 'search',
+            placeholder: 'Venture, student or industry',
+          },
           {
             name: 'ventureStatus',
             label: 'Venture status',

@@ -64,6 +64,26 @@ export type SessionType = (typeof SESSION_TYPES)[number];
 export const ATTENDANCE_STATUSES = ['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 
+/**
+ * Attendance on a Venture Activity, which is a different question from class
+ * attendance and so has its own vocabulary.
+ *
+ * `SubjectAttendance` answers "was this student in that room, on that date" and
+ * only exists once someone has been marked. This one lives on the student's
+ * activity record, which exists from the moment a venture is created — so it
+ * needs a value meaning "nobody has said yet", and `PENDING` is it. That also
+ * keeps "not marked" distinct from "marked absent", which matters because only
+ * one of the two is a fact about the student.
+ */
+export const VENTURE_ATTENDANCE_STATUSES = ['PENDING', 'PRESENT', 'ABSENT'] as const;
+export type VentureAttendanceStatus = (typeof VENTURE_ATTENDANCE_STATUSES)[number];
+
+export const VENTURE_ATTENDANCE_LABELS: Record<VentureAttendanceStatus, string> = {
+  PENDING: 'Pending',
+  PRESENT: 'Present',
+  ABSENT: 'Absent',
+};
+
 export const STATUS_LABELS: Record<UiActivityState, string> = {
   LOCKED: 'Locked',
   NOT_STARTED: 'Not started',

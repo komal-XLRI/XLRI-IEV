@@ -25,6 +25,8 @@ export { StudentVentureActivity, type IStudentVentureActivity } from './StudentV
 export { SupportActivity, type ISupportActivity } from './SupportActivity';
 export { StudentSupportActivity, type IStudentSupportActivity } from './StudentSupportActivity';
 
+export { Workshop, type IWorkshop } from './Workshop';
+
 export { VentureSubmission, type IVentureSubmission } from './VentureSubmission';
 export { Review, type IReview } from './Review';
 export { Evidence, type IEvidence } from './Evidence';

@@ -6,7 +6,7 @@ import { ExportMenu } from '@/components/export/ExportMenu';
 import { FilterBar } from '@/components/filters/FilterBar';
 import { studentImport } from '@/services/import/specs';
 import { getFilterOptions } from '@/services/export/filterOptions';
-import { listUsers } from '@/services/users/userService';
+import { DIRECTORY_LIMIT, listUsers } from '@/services/users/userService';
 import { parseReportFilters } from '@/validators/reportFilters';
 import { USER_STATUSES } from '@/lib/constants/roles';
 import { humanise } from '@/services/export/filterLabels';
@@ -26,14 +26,15 @@ export default async function AdminStudentsPage({
 
   await connectToDatabase();
 
-  const [options, { items }] = await Promise.all([
+  const [options, { items, total }] = await Promise.all([
     getFilterOptions(),
     listUsers({
       role: 'STUDENT',
       q: filters.q,
       status: filters.userStatus,
+      batch: filters.batch,
       page: 1,
-      pageSize: 200,
+      pageSize: DIRECTORY_LIMIT,
     }),
   ]);
 
@@ -43,22 +44,21 @@ export default async function AdminStudentsPage({
     .exec();
   const profileByUser = new Map(profiles.map((p) => [p.userId.toString(), p]));
 
-  const users: DirectoryUser[] = items
-    .map((user) => {
-      const profile = profileByUser.get(user._id.toString());
-      return {
-        _id: user._id.toString(),
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        status: user.status,
-        createdAt: user.createdAt.toISOString(),
-        batch: profile?.batch,
-        detail: profile ? `${profile.rollNumber} · ${profile.batch}` : undefined,
-      };
-    })
-    // Batch lives on the profile, so it is applied after the join.
-    .filter((user) => !filters.batch || user.batch === filters.batch);
+  // Every filter — including batch — was applied by the query above, so this
+  // is a pure projection. Filtering here would only ever search the page.
+  const users: DirectoryUser[] = items.map((user) => {
+    const profile = profileByUser.get(user._id.toString());
+    return {
+      _id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      status: user.status,
+      createdAt: user.createdAt.toISOString(),
+      batch: profile?.batch,
+      detail: profile ? `${profile.rollNumber} · ${profile.batch}` : undefined,
+    };
+  });
 
   return (
     <>
@@ -78,7 +78,12 @@ export default async function AdminStudentsPage({
 
       <FilterBar
         fields={[
-          { name: 'q', label: 'Search', type: 'search', placeholder: 'Name or email' },
+          {
+            name: 'q',
+            label: 'Search',
+            type: 'search',
+            placeholder: 'Name, email or roll number',
+          },
           { name: 'batch', label: 'Batch', type: 'select', options: options.batches },
           {
             name: 'userStatus',
@@ -94,7 +99,7 @@ export default async function AdminStudentsPage({
         <ExportMenu dataset="students" />
       </FilterBar>
 
-      <UserDirectory role="STUDENT" users={users} detailLabel="Roll / batch" />
+      <UserDirectory role="STUDENT" users={users} detailLabel="Roll / batch" total={total} />
     </>
   );
 }

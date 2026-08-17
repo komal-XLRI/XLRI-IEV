@@ -67,12 +67,22 @@ export function DataTable({
   toolbar,
   stickyHeader = true,
   dense = false,
+  searchable: searchableProp,
 }: {
   columns: DataColumn[];
   rows: DataRow[];
   /** Accessible name, announced instead of "table with N rows". */
   caption: string;
   searchPlaceholder?: string;
+  /**
+   * Set `false` where the page already has a `FilterBar` search.
+   *
+   * This table's box can only narrow the rows it was given, so beside a
+   * server-side search it is not a second way to do the same thing — it is a
+   * control that silently disagrees with the first one as soon as the result
+   * set is larger than one screen.
+   */
+  searchable?: boolean;
   /** 0 disables paging — right for short, fixed lists. */
   pageSize?: number;
   emptyTitle?: string;
@@ -88,7 +98,8 @@ export function DataTable({
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
 
-  const searchable = rows.some((row) => row.cells.some((cell) => cell.text ?? cell.sort));
+  const searchable =
+    searchableProp ?? rows.some((row) => row.cells.some((cell) => cell.text ?? cell.sort));
   const toggleable = columns.filter((column) => column.toggleable);
 
   const visible = columns

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ChevronRight, Lock } from 'lucide-react';
-import { ActivityStatusBadge, ReviewStatusBadge } from '@/components/ui/Badge';
+import { ActivityStatusBadge, AttendanceBadge, ReviewStatusBadge } from '@/components/ui/Badge';
 import { MeterBar } from '@/components/ui/Chart';
 import { formatDateRange, windowState } from '@/lib/utils/dates';
 import { cn } from '@/lib/utils/cn';
@@ -68,6 +68,13 @@ export function ActivityTimeline({
                   {row.name}
                 </p>
                 <ActivityStatusBadge state={row.uiState} />
+                {/* Only once someone has actually marked it: an unmarked
+                    register is the programme office's gap to close, and
+                    showing "Pending" on every future activity would be noise
+                    the student can do nothing about. */}
+                {row.attendanceStatus !== 'PENDING' ? (
+                  <AttendanceBadge status={row.attendanceStatus} />
+                ) : null}
                 {open && !locked && row.status !== 'COMPLETED' ? (
                   <span className="text-success-soft-foreground text-[11px] font-semibold">
                     Window open

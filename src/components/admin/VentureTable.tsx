@@ -137,13 +137,17 @@ export function VentureTable({ ventures }: { ventures: VentureRow[] }) {
   }));
 
   return (
+    // Searching and reviewer filtering both live in the page's filter bar,
+    // which queries every venture rather than the rows already on screen. The
+    // Faculty and Mentor selects there are also a more exact way to ask the
+    // question this table's box answered by matching a displayed name.
     <DataTable
       caption="Student ventures"
       columns={columns}
       rows={rows}
-      searchPlaceholder="Search venture, student, faculty or mentor"
-      emptyTitle="No ventures yet"
-      emptyDescription="Create one to generate the student's Venture Activity records."
+      searchable={false}
+      emptyTitle="No ventures match these filters"
+      emptyDescription="Clear the filters above, or create a venture to generate a student's Venture Activity records."
     />
   );
 }

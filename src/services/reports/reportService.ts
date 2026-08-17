@@ -203,9 +203,12 @@ export async function getStudentProgressReport(
         revisionRequired: count(bucket, 'REVISION_REQUIRED'),
         maxAttemptsReached: count(bucket, 'MAX_ATTEMPTS_REACHED'),
       };
-    })
-    // A batch filter is applied here because it lives on the profile, not the venture.
-    .filter((row) => !filters.batch || row.batch === filters.batch);
+    });
+
+  // No batch filter here: `resolveVentureScope` already narrowed the ventures
+  // to that batch, for this report and every other one. Re-applying it with an
+  // exact `===` would also quietly disagree with the scope's case-insensitive
+  // match on a batch imported as "2026 " or "b2026".
 
   return sortRows(
     rows,

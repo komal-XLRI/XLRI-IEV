@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { CalendarDays, HeartHandshake, Info, Link2 } from 'lucide-react';
+import { CalendarClock, CalendarDays, HeartHandshake, Info, Link2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/AppShell';
 import { Card, CardBody, CardHeader, EmptyState, KpiCard, Section } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -12,6 +12,7 @@ import {
 import { EXPERT_WORKSHOP_CODE } from '@/lib/constants/activities';
 import { serialize } from '@/lib/utils/serialize';
 import { humanise } from '@/services/export/filterLabels';
+import { formatDate } from '@/lib/utils/dates';
 
 export const metadata: Metadata = { title: 'Support activities' };
 export const dynamic = 'force-dynamic';
@@ -113,6 +114,22 @@ export default async function SupportActivitiesPage() {
                   }
                 />
                 <CardBody className="space-y-3">
+                  {support.scheduledDate ? (
+                    <p className="type-secondary flex items-center gap-1.5">
+                      <CalendarClock className="size-3.5 shrink-0" aria-hidden="true" />
+                      <span>
+                        {formatDate(support.scheduledDate)}
+                        {support.startTime ? (
+                          <span className="text-muted-foreground tabular-nums">
+                            {' · '}
+                            {support.startTime}
+                            {support.endTime ? `–${support.endTime}` : ''}
+                          </span>
+                        ) : null}
+                      </span>
+                    </p>
+                  ) : null}
+
                   <div>
                     <p className="type-overline mb-1">Feeds these venture activities</p>
                     {ventureActivities.length === 0 ? (

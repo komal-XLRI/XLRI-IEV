@@ -181,7 +181,7 @@ export default async function AdminDashboardPage() {
             hint="Sent back to the student"
             icon={RotateCcw}
             tone="warning"
-            href="/admin/reviews?status=REVISION_REQUIRED"
+            href="/admin/reviews?reviewStatus=REVISION_REQUIRED"
           />
           <KpiCard
             label="Max attempts reached"
