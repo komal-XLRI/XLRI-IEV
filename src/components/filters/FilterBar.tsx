@@ -1,15 +1,81 @@
 'use client';
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { ListFilter, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { COMPACT_CONTROL_CLASSES } from '@/components/ui/Field';
+import { commitValue, filterHref, nextSearchParams, shouldCommit } from '@/lib/utils/filterParams';
 import { cn } from '@/lib/utils/cn';
 
 export interface FilterOption {
   value: string;
   label: string;
+}
+
+/** How long typing pauses before the search is applied. */
+const SEARCH_DEBOUNCE_MS = 400;
+
+/**
+ * A search box that applies itself.
+ *
+ * It previously committed only on blur or Enter, which is invisible: typing a
+ * name and watching the unchanged list below reads as a broken filter, not as
+ * a form waiting to be submitted. Debouncing keeps the original intent — no
+ * request per keystroke — while removing the need to know the secret.
+ *
+ * The input stays controlled by local state so it never fights the user's
+ * cursor mid-word, and re-syncs when the URL changes underneath it (a filter
+ * chip removed, "Clear all" pressed, or the back button).
+ */
+function SearchField({
+  id,
+  value,
+  placeholder,
+  onCommit,
+}: {
+  id: string;
+  value: string;
+  placeholder?: string;
+  onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const committed = useRef(value);
+
+  useEffect(() => {
+    if (value === committed.current) return;
+    committed.current = value;
+    setDraft(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (!shouldCommit(draft, committed.current)) return;
+
+    const timer = setTimeout(() => {
+      committed.current = commitValue(draft);
+      onCommit(committed.current);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [draft, onCommit]);
+
+  return (
+    <input
+      id={id}
+      type="search"
+      value={draft}
+      placeholder={placeholder}
+      onChange={(event) => setDraft(event.target.value)}
+      // Enter applies immediately rather than waiting out the debounce.
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        committed.current = commitValue(event.currentTarget.value);
+        onCommit(committed.current);
+      }}
+      className={COMPACT_CONTROL_CLASSES}
+    />
+  );
 }
 
 export interface FilterFieldDef {
@@ -52,16 +118,18 @@ export function FilterBar({
     .map((field) => ({ field, value: current(field.name) }))
     .filter((entry) => entry.value !== '');
 
-  function update(name: string, value: string) {
-    const params = new URLSearchParams(searchParams.toString());
+  // Stable identity: the debounced search field holds this in an effect, and a
+  // new function on every render would restart the timer before it ever fired.
+  const update = useCallback(
+    (name: string, value: string) => {
+      const params = nextSearchParams(searchParams.toString(), name, value);
 
-    if (value === '') params.delete(name);
-    else params.set(name, value);
-
-    startTransition(() => {
-      router.replace(params.size > 0 ? `${pathname}?${params}` : pathname, { scroll: false });
-    });
-  }
+      startTransition(() => {
+        router.replace(filterHref(pathname, params), { scroll: false });
+      });
+    },
+    [router, pathname, searchParams],
+  );
 
   function clearAll() {
     startTransition(() => {
@@ -152,21 +220,11 @@ export function FilterBar({
                   className={COMPACT_CONTROL_CLASSES}
                 />
               ) : (
-                <input
+                <SearchField
                   id={`filter-${field.name}`}
-                  type="search"
-                  defaultValue={current(field.name)}
+                  value={current(field.name)}
                   placeholder={field.placeholder}
-                  // Committed on blur/Enter rather than per keystroke, so typing
-                  // does not push a history entry or refetch on every character.
-                  onBlur={(event) => update(field.name, event.target.value.trim())}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      update(field.name, event.currentTarget.value.trim());
-                    }
-                  }}
-                  className={COMPACT_CONTROL_CLASSES}
+                  onCommit={(value) => update(field.name, value)}
                 />
               )}
             </div>

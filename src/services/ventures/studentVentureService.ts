@@ -7,17 +7,19 @@ import {
   StudentVenture,
   StudentVentureActivity,
   SupportActivity,
+  User,
   VentureActivity,
   type IStudentVenture,
   type IStudentVentureActivity,
   type IVentureActivity,
 } from '@/models';
 import { ConflictError, ForbiddenError, NotFoundError } from '@/lib/errors';
+import { containsPattern } from '@/lib/utils/regex';
 import { assertUserHasRole } from '@/services/users/userService';
 import { computeProgression, type ProgressionEntry } from '@/lib/rules/progression';
 import { evaluateAttempt, type AttemptDecision } from '@/lib/rules/attempts';
 import { describeReviewProgress } from '@/lib/rules/dualReview';
-import type { UiActivityState } from '@/lib/constants/status';
+import type { UiActivityState, VentureStatus } from '@/lib/constants/status';
 import type { AssignReviewersInput, CreateStudentVentureInput } from '@/validators/ventures';
 import { logger } from '@/lib/logger';
 
@@ -59,16 +61,47 @@ export async function getVentureDetail(studentVentureId: string) {
 }
 
 export async function listVentures(
-  filters: { facultyId?: string; mentorId?: string; q?: string } = {},
+  filters: {
+    facultyId?: string;
+    mentorId?: string;
+    status?: VentureStatus;
+    /** Ventures whose current activity belongs to this term. */
+    termId?: string;
+    q?: string;
+  } = {},
 ) {
   await connectToDatabase();
 
   const filter: Record<string, unknown> = {};
   if (filters.facultyId) filter.facultyId = filters.facultyId;
   if (filters.mentorId) filter.mentorId = filters.mentorId;
+  if (filters.status) filter.status = filters.status;
+
+  // A venture has no term of its own — it sits in whichever term its current
+  // activity belongs to, so the filter resolves through the activity list.
+  if (filters.termId) {
+    const activities = await VentureActivity.find({ termId: filters.termId })
+      .select('_id')
+      .lean()
+      .exec();
+    filter.currentVentureActivityId = { $in: activities.map((activity) => activity._id) };
+  }
+
+  // Free text spans the venture and the student behind it, matching what the
+  // table shows — searching only `ventureName` misses a search by student.
   if (filters.q) {
-    const pattern = new RegExp(filters.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    filter.ventureName = pattern;
+    const pattern = containsPattern(filters.q);
+    const students = await User.find({ role: 'STUDENT', $or: [{ name: pattern }, { email: pattern }] })
+      .select('_id')
+      .lean()
+      .exec();
+
+    filter.$or = [
+      { ventureName: pattern },
+      { ventureTitle: pattern },
+      { industry: pattern },
+      ...(students.length > 0 ? [{ studentId: { $in: students.map((s) => s._id) } }] : []),
+    ];
   }
 
   return StudentVenture.find(filter)

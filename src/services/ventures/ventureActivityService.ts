@@ -146,6 +146,9 @@ export async function upsertSupportActivity(input: {
   description?: string;
   order: number;
   scheduleType: string;
+  scheduledDate?: Date;
+  startTime?: string;
+  endTime?: string;
 }) {
   await connectToDatabase();
 
@@ -159,6 +162,9 @@ export async function upsertSupportActivity(input: {
   if (orderClash)
     throw new ConflictError(`Another support activity already uses order ${input.order}`);
 
+  // Written as an explicit null rather than left out: an omitted key leaves the
+  // stored value untouched, so clearing a date on the form would silently keep
+  // the old one. The model treats null as "no schedule".
   const updated = await SupportActivity.findOneAndUpdate(
     { activityCode: input.activityCode },
     {
@@ -167,6 +173,9 @@ export async function upsertSupportActivity(input: {
         description: input.description || undefined,
         order: input.order,
         scheduleType: input.scheduleType,
+        scheduledDate: input.scheduledDate ?? null,
+        startTime: input.startTime ?? null,
+        endTime: input.endTime ?? null,
       },
     },
     { returnDocument: 'after', upsert: true, runValidators: true, setDefaultsOnInsert: true },

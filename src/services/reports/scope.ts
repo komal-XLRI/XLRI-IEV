@@ -1,8 +1,8 @@
 import 'server-only';
 import type { Types } from 'mongoose';
 import { connectToDatabase } from '@/lib/db/mongoose';
-import { StudentVenture, User, VentureActivity } from '@/models';
-import { containsPattern } from '@/lib/utils/regex';
+import { StudentProfile, StudentVenture, User, VentureActivity } from '@/models';
+import { containsPattern, exactPattern } from '@/lib/utils/regex';
 import type { ReportFilters } from '@/validators/reportFilters';
 
 /**
@@ -25,6 +25,7 @@ export async function resolveVentureScope(filters: ReportFilters): Promise<IdSco
     filters.facultyId ||
     filters.mentorId ||
     filters.ventureStatus ||
+    filters.batch ||
     filters.q;
 
   if (!constrained) return null;
@@ -33,10 +34,38 @@ export async function resolveVentureScope(filters: ReportFilters): Promise<IdSco
 
   const query: Record<string, unknown> = {};
   if (filters.studentVentureId) query._id = filters.studentVentureId;
-  if (filters.studentId) query.studentId = filters.studentId;
   if (filters.facultyId) query.facultyId = filters.facultyId;
   if (filters.mentorId) query.mentorId = filters.mentorId;
   if (filters.ventureStatus) query.status = filters.ventureStatus;
+
+  /**
+   * Batch is resolved here rather than filtered out of each report's rows.
+   *
+   * It lives on the student profile, so every report that does not join the
+   * profile — activity completion, attempts, the review summary — was ignoring
+   * it entirely, and the same "Batch: 2026" chip meant different things on
+   * different cards. Narrowing the venture scope makes it mean one thing.
+   */
+  const studentIds: string[] = [];
+  if (filters.studentId) studentIds.push(filters.studentId);
+
+  if (filters.batch) {
+    const inBatch = await StudentProfile.find({ batch: exactPattern(filters.batch) })
+      .select('userId')
+      .lean()
+      .exec();
+
+    const batchIds = inBatch.map((profile) => profile.userId.toString());
+
+    // Both set means the intersection: that student, if they are in that batch.
+    query.studentId = {
+      $in: filters.studentId
+        ? batchIds.filter((id) => id === filters.studentId)
+        : batchIds,
+    };
+  } else if (filters.studentId) {
+    query.studentId = filters.studentId;
+  }
 
   // Free text matches the venture name or the student behind it.
   if (filters.q) {

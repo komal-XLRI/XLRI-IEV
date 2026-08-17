@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import { CheckCircle2, CircleSlash, Clock, RotateCcw } from 'lucide-react';
 import { PageHeader } from '@/components/layout/AppShell';
 import { Card, CardHeader, KpiCard } from '@/components/ui/Card';
-import { NavLink } from '@/components/layout/NavLink';
+import { FilterBar } from '@/components/filters/FilterBar';
 import { ExportMenu } from '@/components/export/ExportMenu';
+import { parseReportFilters } from '@/validators/reportFilters';
+import { humanise } from '@/services/export/filterLabels';
 import {
   PendingReviewTable,
   ReviewHistoryTable,
@@ -14,7 +16,7 @@ import {
   getPendingReviewAttempts,
   getReviewQueueSummary,
 } from '@/services/dashboard/dashboardService';
-import { REVIEW_DECISIONS, REVIEWER_TYPES, type ReviewerType } from '@/lib/constants/status';
+import { REVIEW_DECISIONS, REVIEWER_TYPES } from '@/lib/constants/status';
 
 export const metadata: Metadata = { title: 'Reviews' };
 export const dynamic = 'force-dynamic';
@@ -24,15 +26,18 @@ const PENDING_LIMIT = 200;
 export default async function AdminReviewsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; reviewerType?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { status, reviewerType } = await searchParams;
-
-  const decision = REVIEW_DECISIONS.find((d) => d === status);
-  const type = REVIEWER_TYPES.find((t) => t === reviewerType) as ReviewerType | undefined;
+  // The shared filter vocabulary, so review status and reviewer type compose
+  // instead of each link replacing the whole query string.
+  const filters = parseReportFilters(await searchParams);
 
   const [reviews, reviewerLoad, pending] = await Promise.all([
-    getAllReviews({ status: decision, reviewerType: type, limit: 200 }),
+    getAllReviews({
+      status: filters.reviewStatus,
+      reviewerType: filters.reviewerType,
+      limit: 200,
+    }),
     getReviewQueueSummary(),
     getPendingReviewAttempts(PENDING_LIMIT),
   ]);
@@ -56,8 +61,32 @@ export default async function AdminReviewsPage({
         eyebrow="Reviews &amp; reporting"
         title="Reviews"
         description="An activity completes only when both the faculty member and the mentor approve the same attempt."
-        action={<ExportMenu dataset="review-log" />}
       />
+
+      <FilterBar
+        fields={[
+          {
+            name: 'reviewStatus',
+            label: 'Decision',
+            type: 'select',
+            options: REVIEW_DECISIONS.map((decision) => ({
+              value: decision,
+              label: humanise(decision) ?? decision,
+            })),
+          },
+          {
+            name: 'reviewerType',
+            label: 'Reviewer',
+            type: 'select',
+            options: REVIEWER_TYPES.map((type) => ({
+              value: type,
+              label: humanise(type) ?? type,
+            })),
+          },
+        ]}
+      >
+        <ExportMenu dataset="review-log" />
+      </FilterBar>
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
@@ -104,18 +133,6 @@ export default async function AdminReviewsPage({
           title="Review history"
           description={`${reviews.length} recorded verdict(s) — never edited or deleted`}
           icon={CheckCircle2}
-          action={
-            <nav className="flex flex-wrap gap-1" aria-label="Filter review history">
-              <NavLink href="/admin/reviews" exact>
-                All
-              </NavLink>
-              <NavLink href="/admin/reviews?status=APPROVED">Approved</NavLink>
-              <NavLink href="/admin/reviews?status=REVISION_REQUIRED">Revision</NavLink>
-              <NavLink href="/admin/reviews?status=REJECTED">Rejected</NavLink>
-              <NavLink href="/admin/reviews?reviewerType=FACULTY">Faculty</NavLink>
-              <NavLink href="/admin/reviews?reviewerType=MENTOR">Mentor</NavLink>
-            </nav>
-          }
         />
         <ReviewHistoryTable rows={history} />
       </Card>

@@ -3,6 +3,7 @@ import {
   CONTENT_STATUSES,
   SUPPORT_ACTIVITY_STATUSES,
   SUPPORT_SCHEDULE_TYPES,
+  VENTURE_ATTENDANCE_STATUSES,
   VENTURE_STATUSES,
 } from '@/lib/constants/status';
 import { dateSchema, objectId } from './common';
@@ -51,13 +52,45 @@ export const updateVentureActivitySchema = z
 
 // ------------------------------------------------- Support activities ----
 
-export const upsertSupportActivitySchema = z.object({
-  activityCode: z.string().trim().min(1).max(10).toUpperCase(),
-  name: z.string().trim().min(1).max(160),
-  description: z.string().trim().max(4000).optional().or(z.literal('')),
-  order: z.coerce.number().int().min(1).max(99),
-  scheduleType: z.enum(SUPPORT_SCHEDULE_TYPES),
-});
+/** Blank clears the field rather than arriving as an empty string. */
+const optionalTime = z
+  .string()
+  .trim()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use 24-hour HH:mm')
+  .optional()
+  .or(z.literal('').transform(() => undefined));
+
+export const upsertSupportActivitySchema = z
+  .object({
+    activityCode: z.string().trim().min(1).max(10).toUpperCase(),
+    name: z.string().trim().min(1).max(160),
+    description: z.string().trim().max(4000).optional().or(z.literal('')),
+    order: z.coerce.number().int().min(1).max(99),
+    scheduleType: z.enum(SUPPORT_SCHEDULE_TYPES),
+
+    // Optional throughout: the eight seeded activities have no schedule, and
+    // requiring one would make every existing record unsavable.
+    scheduledDate: dateSchema.optional().or(z.literal('').transform(() => undefined)),
+    startTime: optionalTime,
+    endTime: optionalTime,
+  })
+  .superRefine((value, ctx) => {
+    if ((value.startTime || value.endTime) && !value.scheduledDate) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['scheduledDate'],
+        message: 'Add a date for these times',
+      });
+    }
+
+    if (value.startTime && value.endTime && value.endTime <= value.startTime) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['endTime'],
+        message: 'End time must be after the start time',
+      });
+    }
+  });
 
 /** Replaces the full support-activity set for one venture activity. */
 export const setSupportMappingsSchema = z.object({
@@ -108,6 +141,33 @@ export const updateStudentSupportActivitySchema = z.object({
   status: z.enum(SUPPORT_ACTIVITY_STATUSES),
   notes: z.string().trim().max(2000).optional().or(z.literal('')),
 });
+
+// ------------------------------------------- Venture activity attendance ----
+
+/**
+ * Bulk attendance, because that is how the roster submits: one entry per
+ * student, in one request. `max` matches the attendance cap in `academic.ts`
+ * so a runaway form cannot post an unbounded write.
+ */
+export const markVentureAttendanceSchema = z.object({
+  ventureActivityId: objectId,
+  entries: z
+    .array(
+      z.object({
+        recordId: objectId,
+        attendanceStatus: z.enum(VENTURE_ATTENDANCE_STATUSES),
+      }),
+    )
+    .min(1, 'Nothing to save')
+    .max(500),
+});
+
+export const markAllVentureAttendanceSchema = z.object({
+  ventureActivityId: objectId,
+  attendanceStatus: z.enum(VENTURE_ATTENDANCE_STATUSES),
+});
+
+export type MarkVentureAttendanceInput = z.infer<typeof markVentureAttendanceSchema>;
 
 export type CreateVentureActivityInput = z.infer<typeof createVentureActivitySchema>;
 export type UpdateVentureActivityInput = z.infer<typeof updateVentureActivitySchema>;

@@ -7,6 +7,8 @@ import {
   assignReviewersSchema,
   createStudentVentureSchema,
   createVentureActivitySchema,
+  markAllVentureAttendanceSchema,
+  markVentureAttendanceSchema,
   setSupportMappingsSchema,
   updateStudentVentureSchema,
   updateVentureActivitySchema,
@@ -26,6 +28,10 @@ import {
   createStudentVenture,
   updateStudentVenture,
 } from '@/services/ventures/studentVentureService';
+import {
+  markAllVentureAttendance,
+  markVentureAttendance,
+} from '@/services/ventures/attendanceService';
 import { serialize } from '@/lib/utils/serialize';
 
 function value(formData: FormData, key: string): string | undefined {
@@ -126,6 +132,9 @@ export async function upsertSupportActivityAction(
       description: value(formData, 'description'),
       order: value(formData, 'order'),
       scheduleType: value(formData, 'scheduleType'),
+      scheduledDate: value(formData, 'scheduledDate'),
+      startTime: value(formData, 'startTime'),
+      endTime: value(formData, 'endTime'),
     });
 
     const activity = await upsertSupportActivity(input);
@@ -253,6 +262,61 @@ export async function syncActivityRecordsAction(
     const result = await bootstrapActivityRecords(studentVentureId);
 
     revalidatePath(`/admin/ventures/${studentVentureId}`);
+    return result;
+  });
+}
+
+// ------------------------------------------- Venture activity attendance ----
+
+/**
+ * Records attendance for a whole roster in one submit.
+ *
+ * The form posts one `attendance:<recordId>` field per student, which keeps the
+ * roster a plain HTML form — it works without JavaScript, and a half-saved page
+ * is impossible because the write is one bulk operation.
+ */
+export async function markVentureAttendanceAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ updated: number }>> {
+  return runAction(async () => {
+    await requireAdmin();
+
+    const ventureActivityId = value(formData, 'ventureActivityId');
+
+    const entries = [...formData.entries()]
+      .filter(([key]) => key.startsWith('attendance:'))
+      .map(([key, status]) => ({
+        recordId: key.slice('attendance:'.length),
+        attendanceStatus: typeof status === 'string' ? status : undefined,
+      }));
+
+    const input = markVentureAttendanceSchema.parse({ ventureActivityId, entries });
+    const result = await markVentureAttendance(input.entries);
+
+    revalidatePath(`/admin/venture-activities/${input.ventureActivityId}`);
+    revalidatePath('/admin/venture-activities');
+    return result;
+  });
+}
+
+/** "Mark everyone present" — the common case, in one click. */
+export async function markAllVentureAttendanceAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ updated: number }>> {
+  return runAction(async () => {
+    await requireAdmin();
+
+    const input = markAllVentureAttendanceSchema.parse({
+      ventureActivityId: value(formData, 'ventureActivityId'),
+      attendanceStatus: value(formData, 'attendanceStatus'),
+    });
+
+    const result = await markAllVentureAttendance(input.ventureActivityId, input.attendanceStatus);
+
+    revalidatePath(`/admin/venture-activities/${input.ventureActivityId}`);
+    revalidatePath('/admin/venture-activities');
     return result;
   });
 }

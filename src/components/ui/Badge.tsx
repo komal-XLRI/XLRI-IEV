@@ -1,16 +1,31 @@
 import type { ReactNode } from 'react';
 import {
+  Blend,
+  CalendarCheck,
   CircleDashed,
   CircleSlash,
   Clock,
   CheckCircle2,
   Lock,
+  MapPin,
   OctagonAlert,
   RotateCcw,
+  Video,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import type { ReviewStatus, UiActivityState } from '@/lib/constants/status';
+import {
+  VENTURE_ATTENDANCE_LABELS,
+  type ReviewStatus,
+  type UiActivityState,
+  type VentureAttendanceStatus,
+} from '@/lib/constants/status';
+import {
+  WORKSHOP_MODE_LABELS,
+  WORKSHOP_STATUS_LABELS,
+  type WorkshopMode,
+  type WorkshopStatus,
+} from '@/lib/constants/workshops';
 
 type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'muted';
 
@@ -123,6 +138,73 @@ export function ReviewStatusBadge({ status, prefix }: { status: ReviewStatus; pr
     <Badge tone={REVIEW_TONE[status]} icon={REVIEW_ICON[status]}>
       {prefix ? `${prefix}: ` : ''}
       {REVIEW_LABEL[status]}
+    </Badge>
+  );
+}
+
+const ATTENDANCE_TONE: Record<VentureAttendanceStatus, Tone> = {
+  PENDING: 'neutral',
+  PRESENT: 'success',
+  ABSENT: 'danger',
+};
+
+const ATTENDANCE_ICON: Record<VentureAttendanceStatus, LucideIcon> = {
+  PENDING: CircleDashed,
+  PRESENT: CheckCircle2,
+  ABSENT: CircleSlash,
+};
+
+/**
+ * Attendance on a Venture Activity.
+ *
+ * `PENDING` reads as neutral rather than as a warning: nobody having marked
+ * the register yet is an administrative gap, not something wrong with the
+ * student, and colouring it amber would put that on the wrong person.
+ */
+export function AttendanceBadge({ status }: { status: VentureAttendanceStatus }) {
+  return (
+    <Badge tone={ATTENDANCE_TONE[status]} icon={ATTENDANCE_ICON[status]}>
+      {VENTURE_ATTENDANCE_LABELS[status]}
+    </Badge>
+  );
+}
+
+const WORKSHOP_TONE: Record<WorkshopStatus, Tone> = {
+  DRAFT: 'muted',
+  PUBLISHED: 'success',
+  COMPLETED: 'info',
+  CANCELLED: 'danger',
+};
+
+const WORKSHOP_ICON: Record<WorkshopStatus, LucideIcon> = {
+  DRAFT: CircleDashed,
+  PUBLISHED: CheckCircle2,
+  COMPLETED: CalendarCheck,
+  CANCELLED: CircleSlash,
+};
+
+export function WorkshopStatusBadge({ status }: { status: WorkshopStatus }) {
+  return (
+    <Badge tone={WORKSHOP_TONE[status]} icon={WORKSHOP_ICON[status]}>
+      {WORKSHOP_STATUS_LABELS[status]}
+    </Badge>
+  );
+}
+
+/**
+ * Mode reads as neutral in every state: it is a property of the event, not a
+ * verdict on it, and tinting it would compete with the status badge beside it.
+ */
+const WORKSHOP_MODE_ICON: Record<WorkshopMode, LucideIcon> = {
+  ONLINE: Video,
+  OFFLINE: MapPin,
+  HYBRID: Blend,
+};
+
+export function WorkshopModeBadge({ mode }: { mode: WorkshopMode }) {
+  return (
+    <Badge tone="neutral" icon={WORKSHOP_MODE_ICON[mode]}>
+      {WORKSHOP_MODE_LABELS[mode]}
     </Badge>
   );
 }
