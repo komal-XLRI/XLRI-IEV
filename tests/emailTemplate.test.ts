@@ -7,7 +7,7 @@
  * markup that a mail client will quietly discard.
  */
 import { describe, expect, it } from 'vitest';
-import { otpEmail } from '../src/lib/email/templates';
+import { otpEmail, workshopAnnouncementEmail } from '../src/lib/email/templates';
 import { LOGO_ASPECT_RATIO } from '../src/lib/branding/logoArt';
 import {
   XLRI_LOGO_DISPLAY,
@@ -168,5 +168,169 @@ describe('client compatibility', () => {
   it('is fluid below its fixed width, for a phone', () => {
     expect(message.html).toContain('max-width:560px');
     expect(message.html).toContain('width:100%');
+  });
+});
+
+/**
+ * The workshop announcement.
+ *
+ * `tests/integration/workshopEmail.itest.ts` proves the send reaches every
+ * active student and is recorded; this proves the message they open actually
+ * tells them where and when to turn up, and that an administrator's typing
+ * cannot become markup on its way there.
+ */
+describe('workshop announcement', () => {
+  const OFFLINE = {
+    title: 'Fundraising without a deck',
+    description: 'A working session on the first cheque.',
+    typeLabel: 'Founder talk',
+    dateLabel: '09 Nov 2026',
+    startTime: '14:00',
+    endTime: '16:30',
+    modeLabel: 'Offline',
+    venue: 'XLRI Jamshedpur, Auditorium 2',
+    hostName: 'R. Menon',
+    hostDesignation: 'Programme Chair',
+    hostOrganisation: 'XLRI',
+    speakerName: 'S. Iyer',
+    speakerDesignation: 'Founder',
+    speakerOrganisation: 'Northwind',
+  };
+
+  const offline = workshopAnnouncementEmail({
+    to: 'student@xlri.ac.in',
+    name: 'Asha Kumar',
+    workshop: OFFLINE,
+  });
+
+  const online = workshopAnnouncementEmail({
+    to: 'student@xlri.ac.in',
+    name: 'Asha Kumar',
+    workshop: {
+      ...OFFLINE,
+      modeLabel: 'Online',
+      venue: undefined,
+      meetingLink: 'https://meet.example.com/abc',
+      registrationLink: 'https://forms.example.com/register',
+    },
+  });
+
+  it('names the workshop and its date in the subject', () => {
+    // The subject is the whole message in a notification preview, so it has to
+    // survive on its own — a bare "Workshop announcement" would not.
+    expect(offline.subject).toBe('Fundraising without a deck — 09 Nov 2026');
+  });
+
+  it('carries the whole invitation in both parts', () => {
+    for (const part of [offline.html, offline.text]) {
+      expect(part).toContain('Fundraising without a deck');
+      expect(part).toContain('Founder talk');
+      expect(part).toContain('09 Nov 2026');
+      expect(part).toContain('14:00');
+      expect(part).toContain('16:30');
+      expect(part).toContain('XLRI Jamshedpur, Auditorium 2');
+      expect(part).toContain('A working session on the first cheque.');
+    }
+  });
+
+  it('qualifies the host and speaker with their role and organisation', () => {
+    expect(offline.text).toContain('R. Menon (Programme Chair · XLRI)');
+    expect(offline.html).toContain('S. Iyer (Founder · Northwind)');
+  });
+
+  it('falls back to a bare name when nothing qualifies it', () => {
+    const bare = workshopAnnouncementEmail({
+      to: 'x@y.z',
+      name: 'A',
+      workshop: { ...OFFLINE, hostDesignation: undefined, hostOrganisation: undefined },
+    });
+
+    expect(bare.text).toContain('Host      : R. Menon\n');
+  });
+
+  it('shows the venue for an offline session and the link for an online one', () => {
+    // The wrong one of these is worse than neither: a student who reads
+    // "Auditorium 2" on an online-only session travels for nothing.
+    expect(offline.html).not.toContain('Join link');
+    expect(offline.text).not.toContain('Join link');
+
+    expect(online.html).toContain('https://meet.example.com/abc');
+    expect(online.html).not.toContain('Auditorium 2');
+    expect(online.text).not.toContain('Venue');
+  });
+
+  it('offers a registration button only when there is somewhere to register', () => {
+    expect(online.html).toContain('Register for this session');
+    expect(online.text).toContain('Register here: https://forms.example.com/register');
+    expect(offline.html).not.toContain('Register for this session');
+  });
+
+  it('omits an optional description rather than leaving an empty paragraph', () => {
+    const terse = workshopAnnouncementEmail({
+      to: 'x@y.z',
+      name: 'A',
+      workshop: { ...OFFLINE, description: undefined },
+    });
+
+    expect(terse.html).not.toMatch(/white-space:pre-line/);
+    expect(terse.html).toContain('Fundraising without a deck');
+  });
+
+  it('escapes everything an administrator typed', () => {
+    const hostile = workshopAnnouncementEmail({
+      to: 'x@y.z',
+      name: '<script>alert(1)</script>',
+      workshop: {
+        ...OFFLINE,
+        title: '<img src=x onerror=alert(1)>',
+        venue: '"><b>bold</b>',
+      },
+    });
+
+    expect(hostile.html).not.toContain('<script>');
+    expect(hostile.html).not.toContain('<img src=x');
+    expect(hostile.html).not.toContain('"><b>bold</b>');
+    expect(hostile.html).toContain('&lt;script&gt;');
+  });
+
+  it('refuses to render a link it would not follow', () => {
+    // These fields are validated on the way in, but a workshop can also arrive
+    // from a seed or an import, and an href is where a javascript: string
+    // would still mean something.
+    const hostile = workshopAnnouncementEmail({
+      to: 'x@y.z',
+      name: 'A',
+      workshop: {
+        ...OFFLINE,
+        meetingLink: 'javascript:alert(1)',
+        registrationLink: 'javascript:alert(1)',
+      },
+    });
+
+    expect(hostile.html).not.toMatch(/href="javascript:/i);
+    expect(hostile.text).not.toContain('javascript:');
+    expect(hostile.html).not.toContain('Register for this session');
+  });
+
+  it('is built from the same institutional shell as the OTP email', () => {
+    expect(offline.html).toContain('XLRI Xavier School of Management');
+    expect(offline.html).toContain(`src="cid:${offline.attachments![0].cid}"`);
+    expect(offline.html).toContain('max-width:560px');
+  });
+
+  it('holds to the same client-compatibility rules', () => {
+    expect(offline.html).not.toMatch(/display\s*:\s*(flex|grid)/i);
+    expect(offline.html).not.toMatch(/<script\b/i);
+    expect(offline.html).not.toMatch(/<link\b/i);
+    expect(offline.html).not.toMatch(/src="https?:/i);
+
+    const blocks = offline.html.match(/<style[\s\S]*?<\/style>/gi) ?? [];
+    expect(blocks).toHaveLength(1);
+
+    const overridden = [...blocks[0]!.matchAll(/\.([a-z-]+)\s*\{/g)].map((match) => match[1]);
+    expect(overridden.length).toBeGreaterThan(0);
+    for (const className of overridden) {
+      expect(offline.html).toContain(`class="${className}"`);
+    }
   });
 });

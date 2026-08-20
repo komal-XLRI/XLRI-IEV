@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Hourglass,
   Link2,
+  Mail,
   MapPin,
   Mic,
   Tag,
@@ -20,8 +21,10 @@ import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Badge, WorkshopModeBadge, WorkshopStatusBadge } from '@/components/ui/Badge';
 import { WORKSHOP_TYPE_LABELS } from '@/lib/constants/workshops';
 import { EditWorkshopForm } from '@/components/admin/WorkshopForm';
+import { SendWorkshopEmail } from '@/components/admin/SendWorkshopEmail';
 import { getWorkshop } from '@/services/workshops/workshopService';
-import { formatDate, toDateInputValue } from '@/lib/utils/dates';
+import { countEmailRecipients } from '@/services/workshops/workshopEmailService';
+import { formatDate, formatDateTime, toDateInputValue } from '@/lib/utils/dates';
 import { isValidObjectId } from '@/lib/utils/ids';
 import type { ReactNode } from 'react';
 
@@ -41,15 +44,17 @@ function duration(startTime: string, endTime: string): string {
   return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
 }
 
-export default async function WorkshopDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function WorkshopDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!isValidObjectId(id)) notFound();
 
-  const workshop = await getWorkshop(id);
+  const [workshop, recipientCount] = await Promise.all([getWorkshop(id), countEmailRecipients()]);
+
+  const email = {
+    isEmailSent: workshop.isEmailSent,
+    emailSentAt: workshop.emailSentAt ? workshop.emailSentAt.toISOString() : null,
+    emailRecipientCount: workshop.emailRecipientCount,
+  };
 
   return (
     <>
@@ -66,12 +71,18 @@ export default async function WorkshopDetailPage({
         }
         action={
           <span className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/admin/academic/workshops"
-              className="text-primary text-sm hover:underline"
-            >
+            <Link href="/admin/academic/workshops" className="text-primary text-sm hover:underline">
               Back to list
             </Link>
+            {workshop.status === 'PUBLISHED' ? (
+              <SendWorkshopEmail
+                variant="button"
+                workshopId={workshop._id.toString()}
+                title={workshop.title}
+                recipientCount={recipientCount}
+                email={email}
+              />
+            ) : null}
             <EditWorkshopForm
               variant="button"
               workshop={{
@@ -176,6 +187,21 @@ export default async function WorkshopDetailPage({
                   <span className="tabular-nums">{workshop.maxParticipants}</span>
                 ) : (
                   <span className="text-muted-foreground">No cap set</span>
+                )}
+              </Detail>
+
+              <Detail icon={Mail} label="Student email">
+                {workshop.isEmailSent ? (
+                  <span>
+                    Sent {formatDateTime(workshop.emailSentAt)} to {workshop.emailRecipientCount}{' '}
+                    student{workshop.emailRecipientCount === 1 ? '' : 's'}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    {workshop.status === 'PUBLISHED'
+                      ? 'Not sent yet'
+                      : 'Publish the workshop to email students'}
+                  </span>
                 )}
               </Detail>
 

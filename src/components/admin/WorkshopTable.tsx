@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { CalendarCheck, Eye, Send, Trash2, Undo2 } from 'lucide-react';
+import { CalendarCheck, Eye, MailCheck, Send, Trash2, Undo2 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ui/Modal';
 import { DataTable, type DataColumn, type DataRow } from '@/components/ui/DataTable';
 import { textCell } from '@/components/ui/dataTableModel';
@@ -10,9 +10,10 @@ import { WorkshopModeBadge, WorkshopStatusBadge } from '@/components/ui/Badge';
 import { COMPACT_CONTROL_CLASSES } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
 import { EditWorkshopForm } from './WorkshopForm';
+import { SendWorkshopEmail, type WorkshopEmailState } from './SendWorkshopEmail';
 import type { WorkshopValues } from './WorkshopFields';
 import { deleteWorkshopAction, setWorkshopStatusAction } from '@/app/actions/adminWorkshops';
-import { formatDate } from '@/lib/utils/dates';
+import { formatDate, formatDateTime } from '@/lib/utils/dates';
 import {
   WORKSHOP_MODES,
   WORKSHOP_MODE_LABELS,
@@ -25,7 +26,7 @@ import {
   type WorkshopType,
 } from '@/lib/constants/workshops';
 
-export interface WorkshopRow extends WorkshopValues {
+export interface WorkshopRow extends WorkshopValues, WorkshopEmailState {
   _id: string;
   status: WorkshopStatus;
   mode: WorkshopMode;
@@ -42,10 +43,18 @@ const COLUMNS: DataColumn[] = [
   { key: 'host', header: 'Host', hideBelow: 'lg', toggleable: true },
   { key: 'speaker', header: 'Speaker', hideBelow: 'md' },
   { key: 'status', header: 'Status' },
+  { key: 'email', header: 'Student email', hideBelow: 'lg', toggleable: true },
   { key: 'actions', header: 'Actions', align: 'right', sortable: false },
 ];
 
-export function WorkshopTable({ workshops }: { workshops: WorkshopRow[] }) {
+export function WorkshopTable({
+  workshops,
+  recipientCount,
+}: {
+  workshops: WorkshopRow[];
+  /** Active students, so the send dialog can name who it is about to reach. */
+  recipientCount: number;
+}) {
   const [status, setStatus] = useState<'ALL' | WorkshopStatus>('ALL');
   const [mode, setMode] = useState<'ALL' | WorkshopMode>('ALL');
   const [type, setType] = useState<'ALL' | WorkshopType>('ALL');
@@ -120,7 +129,22 @@ export function WorkshopTable({ workshops }: { workshops: WorkshopRow[] }) {
         sort: workshop.status,
         text: WORKSHOP_STATUS_LABELS[workshop.status],
       },
-      { node: <RowActions workshop={workshop} /> },
+      {
+        node: workshop.isEmailSent ? (
+          <span className="text-success-soft-foreground inline-flex items-center gap-1 whitespace-nowrap">
+            <MailCheck className="size-3.5 shrink-0" aria-hidden="true" />
+            {formatDate(workshop.emailSentAt)}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">Not sent</span>
+        ),
+        // Sorted so everything still to be announced groups together.
+        sort: workshop.isEmailSent ? (workshop.emailSentAt ?? '1') : '',
+        text: workshop.isEmailSent
+          ? `Sent emailed ${formatDateTime(workshop.emailSentAt)}`
+          : 'Not sent',
+      },
+      { node: <RowActions workshop={workshop} recipientCount={recipientCount} /> },
     ],
   }));
 
@@ -242,7 +266,13 @@ export function WorkshopTable({ workshops }: { workshops: WorkshopRow[] }) {
  * cancelled one are not states anyone wants, so they are simply not shown
  * rather than shown and refused.
  */
-function RowActions({ workshop }: { workshop: WorkshopRow }) {
+function RowActions({
+  workshop,
+  recipientCount,
+}: {
+  workshop: WorkshopRow;
+  recipientCount: number;
+}) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [pending, startTransition] = useTransition();
   const { notify } = useToast();
@@ -302,6 +332,12 @@ function RowActions({ workshop }: { workshop: WorkshopRow }) {
 
       {workshop.status === 'PUBLISHED' ? (
         <>
+          <SendWorkshopEmail
+            workshopId={workshop._id}
+            title={workshop.title}
+            recipientCount={recipientCount}
+            email={workshop}
+          />
           <IconAction
             label={`Unpublish ${workshop.title}`}
             icon={Undo2}
@@ -367,8 +403,8 @@ function IconAction({
       title={label}
       className={
         tone === 'danger'
-          ? 'text-muted-foreground hover:bg-danger-soft hover:text-danger-soft-foreground rounded-control inline-flex size-8 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:text-subtle-foreground'
-          : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground rounded-control inline-flex size-8 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:text-subtle-foreground'
+          ? 'text-muted-foreground hover:bg-danger-soft hover:text-danger-soft-foreground rounded-control disabled:text-subtle-foreground inline-flex size-8 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent'
+          : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground rounded-control disabled:text-subtle-foreground inline-flex size-8 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent'
       }
     >
       <Icon className="size-3.5" aria-hidden="true" />

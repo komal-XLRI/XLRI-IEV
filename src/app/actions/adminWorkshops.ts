@@ -11,6 +11,10 @@ import {
   setWorkshopStatus,
   updateWorkshop,
 } from '@/services/workshops/workshopService';
+import {
+  sendWorkshopAnnouncement,
+  type WorkshopEmailResult,
+} from '@/services/workshops/workshopEmailService';
 import { serialize } from '@/lib/utils/serialize';
 
 /**
@@ -136,5 +140,28 @@ export async function setWorkshopStatusAction(
     revalidatePath(LIST_PATH);
     revalidatePath(`${LIST_PATH}/${workshopId}`);
     return serialize(workshop);
+  });
+}
+
+/**
+ * Emails the workshop details to every active student.
+ *
+ * The send runs inside this action rather than being handed to a queue: the
+ * cohort is small enough to finish in the request, and the administrator gets
+ * a count of what actually went out instead of a promise that it will.
+ */
+export async function sendWorkshopEmailAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<WorkshopEmailResult>> {
+  return runAction(async () => {
+    await requireAdmin();
+
+    const workshopId = objectId.parse(value(formData, 'workshopId'));
+    const result = await sendWorkshopAnnouncement(workshopId);
+
+    revalidatePath(LIST_PATH);
+    revalidatePath(`${LIST_PATH}/${workshopId}`);
+    return result;
   });
 }

@@ -9,6 +9,7 @@ import {
   listExpertWorkshopSessions,
 } from '@/services/academic/academicService';
 import { listWorkshops, getWorkshopSummary } from '@/services/workshops/workshopService';
+import { countEmailRecipients } from '@/services/workshops/workshopEmailService';
 import { WorkshopTable, type WorkshopRow } from '@/components/admin/WorkshopTable';
 import { CreateWorkshopForm } from '@/components/admin/WorkshopForm';
 import { formatDate, toDateInputValue } from '@/lib/utils/dates';
@@ -19,11 +20,12 @@ export const metadata: Metadata = { title: 'Workshops' };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminWorkshopsPage() {
-  const [workshops, summary, sessions, workshopId] = await Promise.all([
+  const [workshops, summary, sessions, workshopId, recipientCount] = await Promise.all([
     listWorkshops(),
     getWorkshopSummary(),
     listExpertWorkshopSessions(),
     getExpertWorkshopId(),
+    countEmailRecipients(),
   ]);
 
   // The table is a client component, so ObjectIds and Dates are flattened to
@@ -50,6 +52,9 @@ export default async function AdminWorkshopsPage() {
     registrationLink: workshop.registrationLink ?? '',
     maxParticipants: workshop.maxParticipants ? String(workshop.maxParticipants) : '',
     status: workshop.status,
+    isEmailSent: workshop.isEmailSent,
+    emailSentAt: workshop.emailSentAt ? workshop.emailSentAt.toISOString() : null,
+    emailRecipientCount: workshop.emailRecipientCount,
   }));
 
   const sessionColumns: DataColumn[] = [
@@ -74,7 +79,7 @@ export default async function AdminWorkshopsPage() {
           action={<CreateWorkshopForm />}
         />
 
-        <WorkshopTable workshops={rows} />
+        <WorkshopTable workshops={rows} recipientCount={recipientCount} />
       </Card>
 
       {/* ---------------------------------------------------------------- */}

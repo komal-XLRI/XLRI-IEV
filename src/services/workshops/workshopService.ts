@@ -11,6 +11,7 @@ import {
   type WorkshopType,
 } from '@/lib/constants/workshops';
 import { createWorkshopSchema, type CreateWorkshopInput } from '@/validators/workshops';
+import { startOfTodayUtc } from '@/lib/utils/dates';
 
 export interface WorkshopFilters {
   q?: string;
@@ -51,17 +52,27 @@ function buildQuery(filters: WorkshopFilters): Record<string, unknown> {
 }
 
 /**
- * Fills in a type for records written before the field existed.
+ * Fills in the fields that records written before them do not carry.
  *
  * A schema default only applies when Mongoose hydrates a document — `.lean()`
- * returns the raw BSON, so a workshop stored before `workshopType` was added
- * comes back without it and would render as a blank cell. Normalising here
- * keeps that off every screen, and the next save writes the value for real.
+ * returns the raw BSON, so a workshop stored before `workshopType` or
+ * `isEmailSent` was added comes back without it and would render as a blank
+ * cell or an undefined flag. Normalising here keeps that off every screen, and
+ * the next save writes the values for real.
  */
-function withType<T extends { workshopType?: WorkshopType }>(
-  workshop: T,
-): T & { workshopType: WorkshopType } {
-  return { ...workshop, workshopType: workshop.workshopType ?? 'OTHER' };
+type WorkshopDefaults = {
+  workshopType?: WorkshopType;
+  isEmailSent?: boolean;
+  emailRecipientCount?: number;
+};
+
+function withDefaults<T extends WorkshopDefaults>(workshop: T) {
+  return {
+    ...workshop,
+    workshopType: workshop.workshopType ?? 'OTHER',
+    isEmailSent: workshop.isEmailSent ?? false,
+    emailRecipientCount: workshop.emailRecipientCount ?? 0,
+  };
 }
 
 /** Newest first — the list is read far more often for "what is coming" than for history. */
@@ -73,14 +84,74 @@ export async function listWorkshops(filters: WorkshopFilters = {}) {
     .lean()
     .exec();
 
-  return rows.map(withType);
+  return rows.map(withDefaults);
+}
+
+/**
+ * What a student is allowed to see.
+ *
+ * A draft is unfinished writing, so it is invisible. A cancelled workshop is
+ * normally invisible too — except once it has been announced by email, because
+ * a student who was told to turn up must be able to find out that it is off.
+ * Silently removing it from their list is the one outcome that strands
+ * somebody outside a locked room.
+ */
+function studentVisibilityQuery(): Record<string, unknown> {
+  return {
+    $or: [
+      { status: { $in: ['PUBLISHED', 'COMPLETED'] } },
+      { status: 'CANCELLED', isEmailSent: true },
+    ],
+  };
+}
+
+/** One workshop as every read in this module returns it — defaults filled in. */
+export type WorkshopRecord = Awaited<ReturnType<typeof getWorkshop>>;
+
+export interface StudentWorkshopFeed {
+  upcoming: WorkshopRecord[];
+  past: WorkshopRecord[];
+}
+
+/**
+ * The workshops on a student's own page, split at today.
+ *
+ * A workshop running today is still upcoming: it has not happened until its
+ * end time, and moving it into "past" at midnight would hide it from the
+ * person on their way to it.
+ */
+export async function listWorkshopsForStudent(
+  now: Date = new Date(),
+): Promise<StudentWorkshopFeed> {
+  await connectToDatabase();
+
+  const today = startOfTodayUtc(now);
+
+  const rows = await Workshop.find(studentVisibilityQuery())
+    .sort({ date: 1, startTime: 1 })
+    .lean()
+    .exec();
+
+  const visible = rows.map(withDefaults);
+
+  // Status wins over the calendar: a workshop the office has marked completed
+  // is over, even if it was marked on the morning it ran. The date alone would
+  // leave it advertised as "coming up" for the rest of the day.
+  const isOver = (workshop: WorkshopRecord) =>
+    workshop.status === 'COMPLETED' || workshop.date < today;
+
+  return {
+    upcoming: visible.filter((workshop) => !isOver(workshop)),
+    // Most recent first — history is read backwards.
+    past: visible.filter(isOver).reverse(),
+  };
 }
 
 export async function getWorkshop(workshopId: string) {
   await connectToDatabase();
   const workshop = await Workshop.findById(workshopId).lean().exec();
   if (!workshop) throw new NotFoundError('Workshop not found');
-  return withType(workshop);
+  return withDefaults(workshop);
 }
 
 export async function createWorkshop(input: CreateWorkshopInput) {
