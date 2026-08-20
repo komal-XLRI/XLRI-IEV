@@ -16,6 +16,7 @@ const NAV: NavItem[] = [
     icon: 'supportActivities',
     group: 'My programme',
   },
+  { href: '/student/workshops', label: 'Workshops', icon: 'workshops', group: 'My programme' },
 ];
 
 export default async function StudentLayout({ children }: { children: ReactNode }) {

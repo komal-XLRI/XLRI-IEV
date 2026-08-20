@@ -13,13 +13,22 @@ import { toTimeline } from '@/services/ventures/timeline';
 import { connectToDatabase } from '@/lib/db/mongoose';
 import { User } from '@/models';
 import { ExportMenu } from '@/components/export/ExportMenu';
+import { NextWorkshop } from '@/components/student/NextWorkshop';
+import { listWorkshopsForStudent } from '@/services/workshops/workshopService';
 
 export const metadata: Metadata = { title: 'My dashboard' };
 export const dynamic = 'force-dynamic';
 
 export default async function StudentDashboardPage() {
   const user = await requireRole('STUDENT');
-  const venture = await getVentureByStudentId(user.userId);
+  const [venture, workshops] = await Promise.all([
+    getVentureByStudentId(user.userId),
+    listWorkshopsForStudent(),
+  ]);
+
+  // Cancelled sessions stay on the workshops page so nobody turns up to one,
+  // but "next workshop" must point at something that is actually happening.
+  const nextWorkshop = workshops.upcoming.find((workshop) => workshop.status !== 'CANCELLED');
 
   if (!venture) {
     return (
@@ -31,6 +40,10 @@ export default async function StudentDashboardPage() {
             description="Your programme office will create your venture record and assign your faculty and mentor. Check back shortly."
           />
         </Card>
+
+        {/* Workshops are open to the whole cohort, so they are worth showing
+            even to a student whose venture record does not exist yet. */}
+        <NextWorkshop workshop={nextWorkshop} />
       </>
     );
   }
@@ -115,6 +128,8 @@ export default async function StudentDashboardPage() {
           programme office before submitting.
         </FormMessage>
       ) : null}
+
+      <NextWorkshop workshop={nextWorkshop} />
 
       <Card className="mt-5">
         <CardHeader

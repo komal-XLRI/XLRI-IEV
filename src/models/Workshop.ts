@@ -56,6 +56,19 @@ export interface IWorkshop {
 
   status: WorkshopStatus;
 
+  /**
+   * Whether the announcement has gone out to students.
+   *
+   * A flag on the workshop rather than a per-recipient log: the cohort is
+   * small, the question an administrator actually asks is "have I told them
+   * yet", and a delivery log nobody reads is a collection to maintain for
+   * nothing. `emailSentAt` and `emailRecipientCount` describe the most recent
+   * send, so a resend overwrites them rather than accumulating.
+   */
+  isEmailSent: boolean;
+  emailSentAt?: Date | null;
+  emailRecipientCount: number;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -93,6 +106,10 @@ const workshopSchema = new Schema<IWorkshop>(
     maxParticipants: { type: Number, min: 1, max: 100_000, default: null },
 
     status: { type: String, required: true, enum: WORKSHOP_STATUSES, default: 'DRAFT' },
+
+    isEmailSent: { type: Boolean, required: true, default: false },
+    emailSentAt: { type: Date, default: null },
+    emailRecipientCount: { type: Number, required: true, min: 0, default: 0 },
   },
   { timestamps: true, collection: 'workshops' },
 );
