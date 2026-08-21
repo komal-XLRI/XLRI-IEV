@@ -2,15 +2,19 @@ import { Schema, type Model, type Types } from 'mongoose';
 import {
   REVIEW_STATUSES,
   STUDENT_ACTIVITY_STATUSES,
-  VENTURE_ATTENDANCE_STATUSES,
   type ReviewStatus,
   type StudentActivityStatus,
-  type VentureAttendanceStatus,
 } from '@/lib/constants/status';
 import { registerModel } from './registerModel';
 
 /**
  * A student's progress through one Venture Activity.
+ *
+ * Attendance is deliberately NOT here. It lives in `VentureActivityAttendance`,
+ * one row per date, because an activity runs for days and can be attended more
+ * than once — and because a register needs to record who marked it and when,
+ * which a column on this document could not do without disturbing `updatedAt`,
+ * which the review queue reads as "waiting since".
  *
  * `facultyId` / `mentorId` mirror the venture's *current* assignment.
  * `reviewFacultyId` / `reviewMentorId` snapshot who actually reviewed this
@@ -33,16 +37,6 @@ export interface IStudentVentureActivity {
   attemptNumber: number;
 
   status: StudentActivityStatus;
-
-  /**
-   * Whether the student turned up for this activity.
-   *
-   * Deliberately independent of `status`: attendance is a fact recorded by the
-   * programme office, while `status` is derived from submissions and reviews.
-   * Marking someone absent neither blocks a submission nor fails an activity —
-   * nothing in the progression, attempt or dual-review rules reads this field.
-   */
-  attendanceStatus: VentureAttendanceStatus;
 
   facultyReviewStatus: ReviewStatus;
   mentorReviewStatus: ReviewStatus;
@@ -77,13 +71,6 @@ const studentVentureActivitySchema = new Schema<IStudentVentureActivity>(
       default: 'NOT_STARTED',
     },
 
-    attendanceStatus: {
-      type: String,
-      required: true,
-      enum: VENTURE_ATTENDANCE_STATUSES,
-      default: 'PENDING',
-    },
-
     facultyReviewStatus: {
       type: String,
       required: true,
@@ -104,7 +91,6 @@ studentVentureActivitySchema.index({ studentVentureId: 1, ventureActivityId: 1 }
 studentVentureActivitySchema.index({ facultyId: 1, facultyReviewStatus: 1 });
 studentVentureActivitySchema.index({ mentorId: 1, mentorReviewStatus: 1 });
 studentVentureActivitySchema.index({ status: 1 });
-studentVentureActivitySchema.index({ ventureActivityId: 1, attendanceStatus: 1 });
 
 export const StudentVentureActivity: Model<IStudentVentureActivity> =
   registerModel<IStudentVentureActivity>('StudentVentureActivity', studentVentureActivitySchema);

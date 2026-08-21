@@ -12,8 +12,15 @@ import {
   VentureSubmission,
 } from '@/models';
 import { NotFoundError } from '@/lib/errors';
-import { getVentureProgress, type VentureActivityProgress } from '@/services/ventures/studentVentureService';
+import {
+  getVentureProgress,
+  type VentureActivityProgress,
+} from '@/services/ventures/studentVentureService';
 import { getStudentSupportActivities } from '@/services/support/supportService';
+import {
+  getStudentAttendance,
+  type StudentAttendance,
+} from '@/services/ventures/attendanceService';
 import type { AttendanceStatus, ReviewDecision, ReviewerType } from '@/lib/constants/status';
 
 /**
@@ -99,6 +106,8 @@ export interface StudentDossier {
   progress: VentureActivityProgress[];
   support: Awaited<ReturnType<typeof getStudentSupportActivities>>;
   submissions: DossierSubmission[];
+  /** Venture Activity attendance, per activity and per date. */
+  ventureAttendance: StudentAttendance;
   classAttendance: DossierClassAttendance[];
   totals: {
     activitiesCompleted: number;
@@ -109,7 +118,7 @@ export interface StudentDossier {
     reviewsReceived: number;
     ventureAttendancePresent: number;
     ventureAttendanceAbsent: number;
-    ventureAttendancePending: number;
+    ventureAttendanceSessions: number;
     classesAttended: number;
     classesRecorded: number;
     supportCompleted: number;
@@ -150,9 +159,13 @@ export async function getStudentDossier(userId: string): Promise<StudentDossier>
   const submissions = ventureId ? await loadSubmissions(ventureId) : [];
   const classAttendance = await loadClassAttendance(userId);
 
+  // Venture attendance lives in its own collection, one row per date, so it is
+  // counted from there rather than from the progress records.
+  const ventureAttendance = ventureId
+    ? await getStudentAttendance(ventureId)
+    : { activities: [], totals: { sessions: 0, present: 0, absent: 0, attendanceRate: null } };
+
   const activitiesCompleted = progress.filter((row) => row.record.status === 'COMPLETED').length;
-  const countAttendance = (status: string) =>
-    progress.filter((row) => row.record.attendanceStatus === status).length;
 
   return {
     user: {
@@ -195,6 +208,7 @@ export async function getStudentDossier(userId: string): Promise<StudentDossier>
     progress,
     support,
     submissions,
+    ventureAttendance,
     classAttendance,
     totals: {
       activitiesCompleted,
@@ -204,9 +218,9 @@ export async function getStudentDossier(userId: string): Promise<StudentDossier>
       attemptsUsed: progress.reduce((sum, row) => sum + row.record.attemptNumber, 0),
       submissions: submissions.length,
       reviewsReceived: submissions.reduce((sum, row) => sum + row.reviews.length, 0),
-      ventureAttendancePresent: countAttendance('PRESENT'),
-      ventureAttendanceAbsent: countAttendance('ABSENT'),
-      ventureAttendancePending: countAttendance('PENDING'),
+      ventureAttendancePresent: ventureAttendance.totals.present,
+      ventureAttendanceAbsent: ventureAttendance.totals.absent,
+      ventureAttendanceSessions: ventureAttendance.totals.sessions,
       classesAttended: classAttendance.filter(
         (row) => row.status === 'PRESENT' || row.status === 'LATE',
       ).length,

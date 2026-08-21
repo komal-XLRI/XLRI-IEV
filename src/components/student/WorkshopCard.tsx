@@ -2,7 +2,9 @@ import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
   CalendarDays,
+  CheckCircle2,
   ChevronRight,
+  CircleSlash,
   Clock,
   ExternalLink,
   MapPin,
@@ -45,9 +47,18 @@ function duration(startTime: string, endTime: string): string {
 export function WorkshopCard({
   workshop,
   variant = 'upcoming',
+  attendance = null,
 }: {
   workshop: WorkshopRecord;
   variant?: 'upcoming' | 'past';
+  /**
+   * This student's own mark, or null if nobody has marked them.
+   *
+   * Read-only: a student can see what the register says about them and cannot
+   * change it. Unmarked shows nothing at all rather than "absent" — nobody has
+   * said they were away, only that nobody has said anything.
+   */
+  attendance?: 'PRESENT' | 'ABSENT' | null;
 }) {
   const id = workshop._id.toString();
 
@@ -68,6 +79,7 @@ export function WorkshopCard({
               {workshop.status === 'CANCELLED' ? (
                 <WorkshopStatusBadge status={workshop.status} />
               ) : null}
+              {attendance ? <AttendanceBadge status={attendance} /> : null}
             </span>
             <span className="type-caption mt-0.5 block">
               {WORKSHOP_TYPE_LABELS[workshop.workshopType]} · {formatDate(workshop.date)} ·{' '}
@@ -95,6 +107,7 @@ export function WorkshopCard({
           {workshop.status === 'CANCELLED' ? (
             <WorkshopStatusBadge status={workshop.status} />
           ) : null}
+          {attendance ? <AttendanceBadge status={attendance} /> : null}
           <span className="text-muted-foreground ml-auto text-[13px] font-medium whitespace-nowrap">
             {relativeDayLabel(workshop.date)}
           </span>
@@ -263,5 +276,18 @@ function ExternalAnchor({ href, children }: { href: string; children: ReactNode 
       <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
       <span className="sr-only"> (opens in a new tab)</span>
     </a>
+  );
+}
+
+/** What the register says about this student, when it says anything. */
+function AttendanceBadge({ status }: { status: 'PRESENT' | 'ABSENT' }) {
+  return status === 'PRESENT' ? (
+    <Badge tone="success" icon={CheckCircle2}>
+      You attended
+    </Badge>
+  ) : (
+    <Badge tone="danger" icon={CircleSlash}>
+      Marked absent
+    </Badge>
   );
 }

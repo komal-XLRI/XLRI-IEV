@@ -28,7 +28,7 @@ export function Modal({
   description?: ReactNode;
   children?: ReactNode;
   footer?: ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -65,7 +65,7 @@ export function Modal({
     };
   }, [onClose]);
 
-  const width = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' }[size];
+  const width = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-3xl' }[size];
 
   return (
     <dialog
@@ -80,11 +80,15 @@ export function Modal({
       }}
       className={cn(
         'bg-surface text-foreground rounded-card shadow-raised m-auto w-[calc(100%-2rem)] border p-0',
+        // Capped and laid out as a column so a long body scrolls inside the
+        // panel instead of stretching it past the viewport — which strands the
+        // footer mid-screen and scrolls the title out of sight.
+        'max-h-[calc(100dvh-3rem)] flex-col overflow-hidden open:flex',
         'backdrop:bg-overlay backdrop:animate-overlay-in open:animate-dialog-in',
         width,
       )}
     >
-      <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
+      <div className="flex shrink-0 items-start justify-between gap-4 border-b px-5 py-4">
         <div className="min-w-0">
           <h2 id={titleId} className="type-card-title">
             {title}
@@ -105,10 +109,16 @@ export function Modal({
         </button>
       </div>
 
-      {children ? <div className="px-5 py-4">{children}</div> : null}
+      {/* `flex-auto`, not `flex-1`: a zero basis would collapse the body to
+          nothing in a panel that sizes itself to its content. */}
+      {children ? (
+        <div className="min-h-0 flex-auto overflow-y-auto overscroll-contain px-5 py-4">
+          {children}
+        </div>
+      ) : null}
 
       {footer ? (
-        <div className="surface-sunken flex flex-wrap items-center justify-end gap-2 border-t px-5 py-3.5">
+        <div className="surface-sunken flex shrink-0 flex-wrap items-center justify-end gap-2 border-t px-5 py-3.5">
           {footer}
         </div>
       ) : null}

@@ -5,15 +5,19 @@ import { PageHeader } from '@/components/layout/AppShell';
 import { Card, CardBody, CardHeader, EmptyState } from '@/components/ui/Card';
 import { WorkshopCard } from '@/components/student/WorkshopCard';
 import { listWorkshopsForStudent } from '@/services/workshops/workshopService';
+import { getStudentWorkshopAttendance } from '@/services/workshops/workshopAttendanceService';
 import { relativeDayLabel } from '@/lib/utils/dates';
 
 export const metadata: Metadata = { title: 'Workshops' };
 export const dynamic = 'force-dynamic';
 
 export default async function StudentWorkshopsPage() {
-  await requireRole('STUDENT');
+  const student = await requireRole('STUDENT');
 
-  const { upcoming, past } = await listWorkshopsForStudent();
+  const [{ upcoming, past }, attendance] = await Promise.all([
+    listWorkshopsForStudent(),
+    getStudentWorkshopAttendance(student.userId),
+  ]);
   const next = upcoming.find((workshop) => workshop.status !== 'CANCELLED');
 
   return (
@@ -50,7 +54,11 @@ export default async function StudentWorkshopsPage() {
         ) : (
           <CardBody className="space-y-4">
             {upcoming.map((workshop) => (
-              <WorkshopCard key={workshop._id.toString()} workshop={workshop} />
+              <WorkshopCard
+                key={workshop._id.toString()}
+                workshop={workshop}
+                attendance={attendance.get(workshop._id.toString())?.status ?? null}
+              />
             ))}
           </CardBody>
         )}
@@ -65,7 +73,12 @@ export default async function StudentWorkshopsPage() {
           />
           <CardBody className="space-y-2.5">
             {past.map((workshop) => (
-              <WorkshopCard key={workshop._id.toString()} workshop={workshop} variant="past" />
+              <WorkshopCard
+                key={workshop._id.toString()}
+                workshop={workshop}
+                variant="past"
+                attendance={attendance.get(workshop._id.toString())?.status ?? null}
+              />
             ))}
           </CardBody>
         </Card>

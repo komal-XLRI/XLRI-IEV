@@ -9,8 +9,6 @@ import {
 } from '@/services/ventures/ventureActivityService';
 import { listTerms } from '@/services/academic/academicService';
 import { EditVentureActivity } from '@/components/admin/EditVentureActivity';
-import { AttendanceRoster } from '@/components/admin/AttendanceRoster';
-import { getAttendanceRoster } from '@/services/ventures/attendanceService';
 import { serialize } from '@/lib/utils/serialize';
 import { isValidObjectId } from '@/lib/utils/ids';
 
@@ -25,12 +23,11 @@ export default async function EditVentureActivityPage({
   const { id } = await params;
   if (!isValidObjectId(id)) notFound();
 
-  const [activity, terms, allSupports, mappedSupports, roster] = await Promise.all([
+  const [activity, terms, allSupports, mappedSupports] = await Promise.all([
     getVentureActivity(id),
     listTerms(),
     listSupportActivities(),
     getSupportActivitiesForVentureActivity(id),
-    getAttendanceRoster(id),
   ]);
 
   return (
@@ -39,9 +36,19 @@ export default async function EditVentureActivityPage({
         title={`${activity.activityCode} · ${activity.name}`}
         description="Dates, attempt limit and the support activities that feed this stage."
         action={
-          <Link href="/admin/venture-activities" className="text-primary text-sm hover:underline">
-            Back to list
-          </Link>
+          <span className="flex flex-wrap items-center gap-3">
+            {/* Attendance moved to its own register; this is the same activity,
+                pre-filtered, so the old route into it still leads somewhere. */}
+            <Link
+              href={`/admin/attendance?ventureActivityId=${id}`}
+              className="text-primary text-sm hover:underline"
+            >
+              Attendance register
+            </Link>
+            <Link href="/admin/venture-activities" className="text-primary text-sm hover:underline">
+              Back to list
+            </Link>
+          </span>
         }
       />
 
@@ -72,21 +79,6 @@ export default async function EditVentureActivityPage({
         }))}
         mappedSupportIds={mappedSupports.map((s) => s._id.toString())}
       />
-
-      <div className="mt-5 scroll-mt-20" id="attendance">
-        <AttendanceRoster
-          ventureActivityId={id}
-          activityLabel={`${activity.activityCode} · ${activity.name}`}
-          rows={roster.rows.map((row) => ({
-            recordId: row.recordId,
-            studentName: row.studentName,
-            studentEmail: row.studentEmail,
-            ventureName: row.ventureName,
-            attendanceStatus: row.attendanceStatus,
-          }))}
-          counts={roster.counts}
-        />
-      </div>
     </>
   );
 }

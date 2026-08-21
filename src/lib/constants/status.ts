@@ -65,21 +65,25 @@ export const ATTENDANCE_STATUSES = ['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'] as c
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 
 /**
- * Attendance on a Venture Activity, which is a different question from class
- * attendance and so has its own vocabulary.
+ * Attendance on a Venture Activity.
  *
- * `SubjectAttendance` answers "was this student in that room, on that date" and
- * only exists once someone has been marked. This one lives on the student's
- * activity record, which exists from the moment a venture is created — so it
- * needs a value meaning "nobody has said yet", and `PENDING` is it. That also
- * keeps "not marked" distinct from "marked absent", which matters because only
- * one of the two is a fact about the student.
+ * Two values, and no "pending". A `VentureActivityAttendance` row exists only
+ * once somebody has marked it, exactly like `SubjectAttendance` — so "nobody
+ * has said yet" is the absence of a record, not a third status. Keeping it as
+ * a status was the mistake in the previous design: it made an unmarked
+ * register indistinguishable from a marked-absent student in every count.
+ *
+ * `LATE` and `EXCUSED` exist for class attendance and deliberately do not
+ * exist here; a venture activity runs over days, so neither means anything.
+ *
+ * Shared by the Venture Activity register and the workshop register. The two
+ * differ in what they are keyed on and whether a date is involved, but "what
+ * marks may a register take" is one answer, and two copies of it would drift.
  */
-export const VENTURE_ATTENDANCE_STATUSES = ['PENDING', 'PRESENT', 'ABSENT'] as const;
-export type VentureAttendanceStatus = (typeof VENTURE_ATTENDANCE_STATUSES)[number];
+export const ATTENDANCE_MARKS = ['PRESENT', 'ABSENT'] as const;
+export type AttendanceMark = (typeof ATTENDANCE_MARKS)[number];
 
-export const VENTURE_ATTENDANCE_LABELS: Record<VentureAttendanceStatus, string> = {
-  PENDING: 'Pending',
+export const ATTENDANCE_MARK_LABELS: Record<AttendanceMark, string> = {
   PRESENT: 'Present',
   ABSENT: 'Absent',
 };

@@ -20,12 +20,11 @@ process.env.AUTH_SECRET ??= 'integration-test-secret-at-least-32-characters';
 const { connectToDatabase, disconnectFromDatabase } = await import('@/lib/db/mongoose');
 const models = await import('@/models');
 const { createUser } = await import('@/services/users/userService');
-const { createStudentVenture, getVentureProgress } = await import(
-  '@/services/ventures/studentVentureService'
-);
+const { createStudentVenture, getVentureProgress } =
+  await import('@/services/ventures/studentVentureService');
 const { createSubmission } = await import('@/services/submissions/submissionService');
 const { createReview } = await import('@/services/reviews/reviewService');
-const { markVentureAttendance } = await import('@/services/ventures/attendanceService');
+const { saveAttendance } = await import('@/services/ventures/attendanceService');
 const { getStudentDossier } = await import('@/services/students/studentDossier');
 
 const SUFFIX = `dossier-${Date.now()}`;
@@ -38,7 +37,7 @@ let facultyId: string;
 let mentorId: string;
 let ventureId: string;
 let otherVentureId: string;
-let firstRecordId: string;
+let firstActivityId: string;
 
 beforeAll(async () => {
   await connectToDatabase();
@@ -137,7 +136,7 @@ beforeAll(async () => {
     const progress = await getVentureProgress(venture);
     const first = progress[0]!;
 
-    if (venture === ventureId) firstRecordId = first.recordId;
+    if (venture === ventureId) firstActivityId = first.activity._id.toString();
 
     await models.Evidence.create({
       submissionId: null,
@@ -167,7 +166,15 @@ beforeAll(async () => {
     );
   }
 
-  await markVentureAttendance([{ recordId: firstRecordId, attendanceStatus: 'PRESENT' }]);
+  const admin = await models.User.findOne({ role: 'ADMIN' }).select('_id').lean().exec();
+  if (!admin) throw new Error('Run `npm run seed` before the integration tests.');
+
+  await saveAttendance({
+    ventureActivityId: firstActivityId,
+    date: new Date('2026-05-04T00:00:00.000Z'),
+    entries: [{ studentVentureId: ventureId, status: 'PRESENT' }],
+    markedBy: admin._id.toString(),
+  });
 });
 
 afterAll(async () => {
@@ -190,6 +197,9 @@ afterAll(async () => {
     .lean()
     .exec();
 
+  await models.VentureActivityAttendance.deleteMany({
+    studentVentureId: { $in: ventureIds },
+  }).exec();
   await models.Review.deleteMany({ submissionId: { $in: submissions.map((s) => s._id) } }).exec();
   await models.VentureSubmission.deleteMany({
     studentVentureActivityId: { $in: recordIds },
@@ -300,10 +310,16 @@ describe('activities, submissions and reviews', () => {
   });
 
   it('includes venture activity attendance', async () => {
-    const { totals } = await getStudentDossier(studentId);
+    const { totals, ventureAttendance } = await getStudentDossier(studentId);
 
     expect(totals.ventureAttendancePresent).toBe(1);
-    expect(totals.ventureAttendancePending).toBeGreaterThan(0);
+    expect(totals.ventureAttendanceSessions).toBe(1);
+
+    // Only activities with a mark appear: unmarked is the absence of a record,
+    // so the other eleven contribute nothing rather than a "pending" row.
+    expect(ventureAttendance.activities).toHaveLength(1);
+    expect(ventureAttendance.activities[0]!.marks).toHaveLength(1);
+    expect(ventureAttendance.totals.attendanceRate).toBe(100);
   });
 
   it('includes the support activity records', async () => {

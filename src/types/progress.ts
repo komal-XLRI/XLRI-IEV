@@ -3,7 +3,6 @@ import type {
   StudentActivityStatus,
   SubmissionType,
   UiActivityState,
-  VentureAttendanceStatus,
 } from '@/lib/constants/status';
 
 /**
@@ -26,9 +25,6 @@ export interface TimelineRow {
   status: StudentActivityStatus;
   uiState: UiActivityState;
   unlocked: boolean;
-
-  /** Recorded by the programme office; gates nothing. */
-  attendanceStatus: VentureAttendanceStatus;
 
   facultyReviewStatus: ReviewStatus;
   mentorReviewStatus: ReviewStatus;

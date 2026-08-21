@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import {
   Activity,
+  CalendarCheck,
   ClipboardCheck,
   FileBarChart,
+  Grid3x3,
   Layers,
+  Presentation,
   RefreshCw,
   ScrollText,
   TrendingUp,
@@ -102,6 +105,33 @@ export default async function AdminReportsPage({
       icon: ScrollText,
       rows: null,
       unit: 'verdict',
+    },
+    {
+      dataset: 'venture-attendance',
+      title: 'Venture activity attendance',
+      description:
+        'Every mark, with its date, remark and who recorded it. Filter by activity, date range or student above.',
+      icon: CalendarCheck,
+      rows: null,
+      unit: 'record',
+    },
+    {
+      dataset: 'venture-attendance-consolidated',
+      title: 'Consolidated venture attendance',
+      description:
+        'Every student against every activity: present, absent, and the register dates nobody marked them on.',
+      icon: Grid3x3,
+      rows: null,
+      unit: 'line',
+    },
+    {
+      dataset: 'workshop-attendance',
+      title: 'Workshop attendance',
+      description:
+        'Who attended each workshop, with the remark and who recorded it. Filter by type, mode or date above.',
+      icon: Presentation,
+      rows: null,
+      unit: 'record',
     },
     {
       dataset: 'support-participation',

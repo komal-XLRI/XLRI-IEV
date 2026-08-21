@@ -21,6 +21,8 @@ const LABELS: Record<string, string> = {
   student: 'Student',
   faculty: 'Faculty',
   mentor: 'Mentor',
+  attendance: 'Attendance',
+  consolidated: 'Consolidated',
   students: 'Students',
   mentors: 'Mentors',
   ventures: 'Ventures',

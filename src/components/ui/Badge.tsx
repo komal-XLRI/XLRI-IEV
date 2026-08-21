@@ -15,10 +15,10 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import {
-  VENTURE_ATTENDANCE_LABELS,
+  ATTENDANCE_MARK_LABELS,
   type ReviewStatus,
   type UiActivityState,
-  type VentureAttendanceStatus,
+  type AttendanceMark,
 } from '@/lib/constants/status';
 import {
   WORKSHOP_MODE_LABELS,
@@ -142,14 +142,12 @@ export function ReviewStatusBadge({ status, prefix }: { status: ReviewStatus; pr
   );
 }
 
-const ATTENDANCE_TONE: Record<VentureAttendanceStatus, Tone> = {
-  PENDING: 'neutral',
+const ATTENDANCE_TONE: Record<AttendanceMark, Tone> = {
   PRESENT: 'success',
   ABSENT: 'danger',
 };
 
-const ATTENDANCE_ICON: Record<VentureAttendanceStatus, LucideIcon> = {
-  PENDING: CircleDashed,
+const ATTENDANCE_ICON: Record<AttendanceMark, LucideIcon> = {
   PRESENT: CheckCircle2,
   ABSENT: CircleSlash,
 };
@@ -157,14 +155,14 @@ const ATTENDANCE_ICON: Record<VentureAttendanceStatus, LucideIcon> = {
 /**
  * Attendance on a Venture Activity.
  *
- * `PENDING` reads as neutral rather than as a warning: nobody having marked
- * the register yet is an administrative gap, not something wrong with the
- * student, and colouring it amber would put that on the wrong person.
+ * Only two values reach here. "Not marked" is the absence of a record rather
+ * than a status, so the caller renders nothing at all in that case — a badge
+ * saying "pending" would put an administrative gap on the student.
  */
-export function AttendanceBadge({ status }: { status: VentureAttendanceStatus }) {
+export function AttendanceBadge({ status }: { status: AttendanceMark }) {
   return (
     <Badge tone={ATTENDANCE_TONE[status]} icon={ATTENDANCE_ICON[status]}>
-      {VENTURE_ATTENDANCE_LABELS[status]}
+      {ATTENDANCE_MARK_LABELS[status]}
     </Badge>
   );
 }

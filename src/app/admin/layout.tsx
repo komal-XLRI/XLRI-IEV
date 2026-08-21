@@ -32,6 +32,12 @@ const NAV: NavItem[] = [
     icon: 'supportActivities',
     group: 'Venture management',
   },
+  {
+    href: '/admin/attendance',
+    label: 'Attendance',
+    icon: 'attendance',
+    group: 'Venture management',
+  },
 
   { href: '/admin/academic', label: 'Terms', icon: 'academic', exact: true, group: 'Academic' },
   { href: '/admin/academic/subjects', label: 'Subjects', icon: 'subjects', group: 'Academic' },

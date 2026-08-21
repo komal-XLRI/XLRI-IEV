@@ -55,6 +55,7 @@ export async function describeFilters(filters: ReportFilters): Promise<AppliedFi
     supportActivity ? `${supportActivity.activityCode} ${supportActivity.name}` : undefined,
   );
   push('Subject', subject ? `${subject.code} ${subject.name}` : undefined);
+  push('Attendance', humanise(filters.attendanceStatus));
   push('Student', people.student);
   push('Faculty', people.faculty);
   push('Mentor', people.mentor);
@@ -66,6 +67,9 @@ export async function describeFilters(filters: ReportFilters): Promise<AppliedFi
   push('Role', humanise(filters.role));
   push('Reviewer type', humanise(filters.reviewerType));
   push('Review decision', humanise(filters.reviewStatus));
+  push('Workshop type', humanise(filters.workshopType));
+  push('Workshop mode', humanise(filters.workshopMode));
+  push('Workshop status', humanise(filters.workshopStatus));
 
   if (filters.dateFrom || filters.dateTo) {
     push(

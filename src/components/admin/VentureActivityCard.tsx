@@ -20,8 +20,8 @@ export interface VentureActivityView {
   /** Cohort progress; null when no student has reached this activity yet. */
   completed: number;
   total: number;
-  /** Attendance across the cohort for this activity. */
-  attendance: { present: number; absent: number; pending: number; total: number };
+  /** Attendance across every date a register has been taken on. */
+  attendance: { present: number; absent: number; sessions: number; records: number };
   /** 'OPEN' | 'BEFORE' | 'AFTER' | null when no window is configured. */
   windowState: 'OPEN' | 'BEFORE' | 'AFTER' | null;
 }
@@ -167,35 +167,36 @@ export function VentureActivityCard({ activity }: { activity: VentureActivityVie
             />
           </div>
         ) : null}
-        {activity.attendance.total > 0 ? (
+        {activity.attendance.records > 0 ? (
           <div>
             <div className="mb-1 flex items-baseline justify-between">
               <span className="type-overline">Attendance</span>
               <span className="type-caption tabular-nums">
-                {activity.attendance.present}/{activity.attendance.total} present
+                {activity.attendance.present}/{activity.attendance.records} present
               </span>
             </div>
-            {/* Measured against how many have been *marked*, not the cohort:
-                a register nobody has filled in yet is not 0% attendance. */}
+            {/* Measured against the marks that exist, not against the cohort:
+                a register nobody has taken yet is not 0% attendance. */}
             <MeterBar
               value={activity.attendance.present}
-              max={Math.max(1, activity.attendance.present + activity.attendance.absent)}
+              max={Math.max(1, activity.attendance.records)}
               size="sm"
               tone={activity.attendance.absent === 0 ? 'success' : 'warning'}
               label={`${activity.activityCode} attendance`}
             />
-            {activity.attendance.pending > 0 ? (
-              <p className="type-caption mt-1">
-                {activity.attendance.pending} not yet marked
-              </p>
-            ) : null}
+            <p className="type-caption mt-1">
+              Across {activity.attendance.sessions} recorded date
+              {activity.attendance.sessions === 1 ? '' : 's'}
+            </p>
           </div>
         ) : null}
       </div>
 
       <footer className="surface-sunken flex items-center justify-end gap-3 border-t px-4 py-2">
+        {/* Attendance is its own register now; this opens it pre-filtered to
+            this activity, which is the view that used to live on this card. */}
         <Link
-          href={`/admin/venture-activities/${activity.id}#attendance`}
+          href={`/admin/attendance?ventureActivityId=${activity.id}`}
           className="text-primary text-[13px] font-medium hover:underline"
         >
           Attendance

@@ -4,12 +4,14 @@ import { PageHeader } from '@/components/layout/AppShell';
 import { Card, KpiCard } from '@/components/ui/Card';
 import { VentureTable, type VentureRow } from '@/components/admin/VentureTable';
 import { CreateVentureForm } from '@/components/admin/CreateVentureForm';
+import { ImportPanel } from '@/components/import/ImportPanel';
 import { FilterBar } from '@/components/filters/FilterBar';
 import { ExportMenu } from '@/components/export/ExportMenu';
 import { listVentures } from '@/services/ventures/studentVentureService';
 import { listReviewersByRole, listStudentsWithoutVenture } from '@/services/users/userService';
 import { getStudentProgressReport } from '@/services/reports/reportService';
 import { getFilterOptions } from '@/services/export/filterOptions';
+import { ventureImport } from '@/services/import/specs';
 import { parseReportFilters } from '@/validators/reportFilters';
 import { serialize } from '@/lib/utils/serialize';
 import { VENTURE_STATUSES } from '@/lib/constants/status';
@@ -90,7 +92,17 @@ export default async function AdminVenturesPage({
         eyebrow="Venture management"
         title="Student ventures"
         description="One primary venture per student. Assigning a faculty member and a mentor here is what grants review rights."
-        action={<CreateVentureForm {...people} />}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <ImportPanel
+              spec={ventureImport.key}
+              title={ventureImport.title}
+              description={ventureImport.description}
+              columns={ventureImport.columns}
+            />
+            <CreateVentureForm {...people} />
+          </div>
+        }
       />
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

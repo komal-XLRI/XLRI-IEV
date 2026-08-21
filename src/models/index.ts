@@ -21,11 +21,17 @@ export { StudentVenture, type IStudentVenture } from './StudentVenture';
 export { VentureActivity, type IVentureActivity } from './VentureActivity';
 export { ActivitySupportMapping, type IActivitySupportMapping } from './ActivitySupportMapping';
 export { StudentVentureActivity, type IStudentVentureActivity } from './StudentVentureActivity';
+export {
+  VentureActivityAttendance,
+  attendanceDay,
+  type IVentureActivityAttendance,
+} from './VentureActivityAttendance';
 
 export { SupportActivity, type ISupportActivity } from './SupportActivity';
 export { StudentSupportActivity, type IStudentSupportActivity } from './StudentSupportActivity';
 
 export { Workshop, type IWorkshop } from './Workshop';
+export { WorkshopAttendance, type IWorkshopAttendance } from './WorkshopAttendance';
 
 export { VentureSubmission, type IVentureSubmission } from './VentureSubmission';
 export { Review, type IReview } from './Review';

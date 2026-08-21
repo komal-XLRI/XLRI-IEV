@@ -3,7 +3,6 @@ import {
   CONTENT_STATUSES,
   SUPPORT_ACTIVITY_STATUSES,
   SUPPORT_SCHEDULE_TYPES,
-  VENTURE_ATTENDANCE_STATUSES,
   VENTURE_STATUSES,
 } from '@/lib/constants/status';
 import { dateSchema, objectId } from './common';
@@ -141,33 +140,6 @@ export const updateStudentSupportActivitySchema = z.object({
   status: z.enum(SUPPORT_ACTIVITY_STATUSES),
   notes: z.string().trim().max(2000).optional().or(z.literal('')),
 });
-
-// ------------------------------------------- Venture activity attendance ----
-
-/**
- * Bulk attendance, because that is how the roster submits: one entry per
- * student, in one request. `max` matches the attendance cap in `academic.ts`
- * so a runaway form cannot post an unbounded write.
- */
-export const markVentureAttendanceSchema = z.object({
-  ventureActivityId: objectId,
-  entries: z
-    .array(
-      z.object({
-        recordId: objectId,
-        attendanceStatus: z.enum(VENTURE_ATTENDANCE_STATUSES),
-      }),
-    )
-    .min(1, 'Nothing to save')
-    .max(500),
-});
-
-export const markAllVentureAttendanceSchema = z.object({
-  ventureActivityId: objectId,
-  attendanceStatus: z.enum(VENTURE_ATTENDANCE_STATUSES),
-});
-
-export type MarkVentureAttendanceInput = z.infer<typeof markVentureAttendanceSchema>;
 
 export type CreateVentureActivityInput = z.infer<typeof createVentureActivitySchema>;
 export type UpdateVentureActivityInput = z.infer<typeof updateVentureActivitySchema>;
