@@ -15,7 +15,7 @@ import {
   getSupportMappingIndex,
 } from '@/services/ventures/ventureActivityService';
 import { getActivityCompletionReport } from '@/services/reports/reportService';
-import { getAttendanceSummary } from '@/services/ventures/attendanceService';
+import { getAttendanceBoard } from '@/services/ventures/attendanceService';
 import { listTerms } from '@/services/academic/academicService';
 import { ventureActivityImport } from '@/services/import/specs';
 import { windowState } from '@/lib/utils/dates';
@@ -35,12 +35,12 @@ export default async function VentureActivitiesPage() {
     listSupportActivities(),
     getSupportMappingIndex(),
     getActivityCompletionReport(),
-    getAttendanceSummary(),
+    getAttendanceBoard(),
   ]);
 
   const supportCodeById = new Map(supports.map((s) => [s._id.toString(), s.activityCode]));
   const completionByCode = new Map(completion.map((row) => [row.activityCode, row]));
-  const attendanceById = new Map(attendance.map((row) => [row.ventureActivityId, row]));
+  const attendanceById = new Map(attendance.rows.map((row) => [row._id, row]));
   const now = new Date();
 
   const views: VentureActivityView[] = activities.map((activity) => {
@@ -67,8 +67,8 @@ export default async function VentureActivitiesPage() {
       attendance: {
         present: attendanceById.get(id)?.present ?? 0,
         absent: attendanceById.get(id)?.absent ?? 0,
-        pending: attendanceById.get(id)?.pending ?? 0,
-        total: attendanceById.get(id)?.total ?? 0,
+        sessions: attendanceById.get(id)?.sessions ?? 0,
+        records: attendanceById.get(id)?.records ?? 0,
       },
       windowState:
         activity.startDate && activity.endDate

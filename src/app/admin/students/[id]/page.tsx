@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/AppShell';
 import { Card, CardBody, CardHeader, EmptyState, KpiCard, Section } from '@/components/ui/Card';
-import { Badge, AttendanceBadge, ReviewStatusBadge } from '@/components/ui/Badge';
+import { Badge, ReviewStatusBadge } from '@/components/ui/Badge';
 import { ActivityTimeline, ProgressBar } from '@/components/venture/ActivityTimeline';
 import { ExportMenu } from '@/components/export/ExportMenu';
 import { getStudentDossier } from '@/services/students/studentDossier';
@@ -51,7 +51,16 @@ export default async function AdminStudentDetailPage({
   if (!isValidObjectId(id)) notFound();
 
   const dossier = await getStudentDossier(id);
-  const { user, profile, venture, support, submissions, classAttendance, totals } = dossier;
+  const {
+    user,
+    profile,
+    venture,
+    support,
+    submissions,
+    ventureAttendance,
+    classAttendance,
+    totals,
+  } = dossier;
 
   const timeline = toTimeline(dossier.progress);
 
@@ -105,7 +114,7 @@ export default async function AdminStudentDetailPage({
         <KpiCard
           label="Activity attendance"
           value={`${totals.ventureAttendancePresent} present`}
-          hint={`${totals.ventureAttendanceAbsent} absent · ${totals.ventureAttendancePending} not marked`}
+          hint={`${totals.ventureAttendanceAbsent} absent across ${totals.ventureAttendanceSessions} session(s)`}
           icon={CalendarCheck}
           tone={totals.ventureAttendanceAbsent > 0 ? 'warning' : 'positive'}
         />
@@ -440,23 +449,51 @@ export default async function AdminStudentDetailPage({
         </div>
       </div>
 
-      {/* Venture Activity attendance, laid out per activity rather than buried
-          in the timeline, because "where was this student" is its own question. */}
-      {timeline.length > 0 ? (
+      {/* Venture Activity attendance, per activity and per date. Its own
+          section rather than a column on the timeline, because "where was this
+          student on the 14th" is a different question from "how far have they
+          got", and only one of the two has dates in it. */}
+      {ventureAttendance.activities.length > 0 ? (
         <Section
           className="mt-5"
           title="Venture activity attendance"
-          description="Recorded by the programme office. It gates nothing — an absence does not block a submission."
+          description={`${ventureAttendance.totals.present} present · ${ventureAttendance.totals.absent} absent across ${ventureAttendance.totals.sessions} recorded session(s). It gates nothing — an absence does not block a submission.`}
         >
           <Card>
             <ul className="divide-border divide-y">
-              {timeline.map((row) => (
-                <li key={row.recordId} className="flex items-center gap-3 px-5 py-2.5">
-                  <span className="min-w-0 flex-1 truncate text-[13.5px]">
-                    <span className="font-mono text-xs font-semibold">{row.activityCode}</span>{' '}
-                    {row.name}
-                  </span>
-                  <AttendanceBadge status={row.attendanceStatus} />
+              {ventureAttendance.activities.map((activity) => (
+                <li key={activity.ventureActivityId} className="px-5 py-3">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="min-w-0 flex-1 truncate text-[13.5px]">
+                      <span className="font-mono text-xs font-semibold">
+                        {activity.activityCode}
+                      </span>{' '}
+                      {activity.name}
+                    </span>
+                    <span className="type-caption tabular-nums">
+                      {activity.present} present · {activity.absent} absent
+                    </span>
+                    <span className="text-[13px] font-semibold tabular-nums">
+                      {activity.attendanceRate}%
+                    </span>
+                  </div>
+
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {activity.marks.map((mark) => (
+                      <li key={mark.date} title={mark.remarks || undefined}>
+                        <span
+                          className={
+                            mark.status === 'PRESENT'
+                              ? 'border-success-border bg-success-soft text-success-soft-foreground rounded-control inline-flex items-center gap-1 border px-2 py-0.5 text-[12px] font-medium tabular-nums'
+                              : 'border-danger-border bg-danger-soft text-danger-soft-foreground rounded-control inline-flex items-center gap-1 border px-2 py-0.5 text-[12px] font-medium tabular-nums'
+                          }
+                        >
+                          {formatDate(mark.date)}
+                          {mark.remarks ? ' *' : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))}
             </ul>

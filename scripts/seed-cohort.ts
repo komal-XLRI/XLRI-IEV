@@ -46,7 +46,14 @@ const STUDENTS = [
   { handle: 'harsh', name: 'Harsh Vardhan', roll: 'IEV108', batch: '2027', cluster: 'B' },
   { handle: 'ira', name: 'Ira Sengupta', roll: 'IEV109', batch: '2027', cluster: 'C' },
   // Deactivated, so the Status filter has something to find.
-  { handle: 'jatin', name: 'Jatin Rao', roll: 'IEV110', batch: '2026', cluster: 'A', inactive: true },
+  {
+    handle: 'jatin',
+    name: 'Jatin Rao',
+    roll: 'IEV110',
+    batch: '2026',
+    cluster: 'A',
+    inactive: true,
+  },
   // No venture, so "students without a venture" is not an empty list.
   { handle: 'kavya', name: 'Kavya Iyer', roll: 'IEV111', batch: '2027', cluster: 'C' },
   { handle: 'lakshmi', name: 'Lakshmi Pillai', roll: 'IEV112', batch: '2026', cluster: 'B' },
@@ -308,8 +315,14 @@ const WORKSHOPS = [
   },
 ];
 
-/** Attendance to record on the first two activities, by student handle. */
-const ATTENDANCE: Record<string, 'PRESENT' | 'ABSENT' | 'PENDING'> = {
+/**
+ * Attendance to record on the first two activities, by student handle.
+ *
+ * `SKIP` means no row at all — "not marked" is the absence of a record, so a
+ * seeded student can be left genuinely unmarked rather than given a status
+ * that means nobody has decided yet.
+ */
+const ATTENDANCE: Record<string, 'PRESENT' | 'ABSENT' | 'SKIP'> = {
   asha: 'PRESENT',
   bhavin: 'PRESENT',
   chitra: 'PRESENT',
@@ -318,8 +331,8 @@ const ATTENDANCE: Record<string, 'PRESENT' | 'ABSENT' | 'PENDING'> = {
   farhan: 'ABSENT',
   gita: 'PRESENT',
   harsh: 'PRESENT',
-  ira: 'PENDING',
-  lakshmi: 'PENDING',
+  ira: 'SKIP',
+  lakshmi: 'SKIP',
 };
 
 async function main() {
@@ -334,7 +347,7 @@ async function main() {
     await import('../src/services/ventures/studentVentureService');
   const { createSubmission } = await import('../src/services/submissions/submissionService');
   const { createReview } = await import('../src/services/reviews/reviewService');
-  const { markVentureAttendance } = await import('../src/services/ventures/attendanceService');
+  const { saveAttendance } = await import('../src/services/ventures/attendanceService');
   const { createWorkshop } = await import('../src/services/workshops/workshopService');
 
   if ((await models.VentureActivity.countDocuments({ status: 'ACTIVE' }).exec()) < 2) {
@@ -435,10 +448,7 @@ async function main() {
     const facultyId = spec.faculty ? idByHandle.get(spec.faculty) : undefined;
     const mentorId = spec.mentor ? idByHandle.get(spec.mentor) : undefined;
 
-    const existing = await models.StudentVenture.findOne({ studentId })
-      .select('_id')
-      .lean()
-      .exec();
+    const existing = await models.StudentVenture.findOne({ studentId }).select('_id').lean().exec();
 
     if (existing) {
       ventureIdByStudent.set(spec.student, existing._id.toString());
@@ -578,7 +588,7 @@ async function main() {
   console.log('Attendance');
 
   const activities = await models.VentureActivity.find({ status: 'ACTIVE' })
-    .select('_id')
+    .select('_id startDate')
     .sort({ order: 1 })
     .limit(2)
     .lean()
@@ -586,34 +596,50 @@ async function main() {
 
   let marked = 0;
 
+  // Registers need somebody accountable for them, so the seed marks as the
+  // administrator rather than inventing an anonymous author.
+  const admin = await models.User.findOne({ role: 'ADMIN' }).select('_id').lean().exec();
+  if (!admin) throw new Error('No admin account found. Run `npm run seed` first.');
+
   for (const activity of activities) {
-    const entries: Array<{ recordId: string; attendanceStatus: 'PRESENT' | 'ABSENT' | 'PENDING' }> =
-      [];
+    const entries: Array<{
+      studentVentureId: string;
+      status: 'PRESENT' | 'ABSENT';
+      remarks?: string;
+    }> = [];
 
     for (const [handle, status] of Object.entries(ATTENDANCE)) {
-      if (status === 'PENDING') continue;
+      if (status === 'SKIP') continue;
 
       const ventureId = ventureIdByStudent.get(handle);
-      if (!ventureId) continue;
-
-      const record = await models.StudentVentureActivity.findOne({
-        studentVentureId: ventureId,
-        ventureActivityId: activity._id,
-      })
-        .select('_id')
-        .lean()
-        .exec();
-
-      if (record) entries.push({ recordId: record._id.toString(), attendanceStatus: status });
+      if (ventureId) {
+        entries.push({
+          studentVentureId: ventureId,
+          status,
+          remarks: status === 'ABSENT' ? 'Informed the programme office in advance' : undefined,
+        });
+      }
     }
 
     if (entries.length > 0) {
-      const result = await markVentureAttendance(entries);
-      marked += result.updated;
+      // Two dates per activity, so the register exercises the thing the old
+      // single-field design could not represent at all.
+      for (const offset of [0, 3]) {
+        const date = new Date(activity.startDate);
+        date.setUTCDate(date.getUTCDate() + offset);
+
+        const result = await saveAttendance({
+          ventureActivityId: activity._id.toString(),
+          date,
+          entries,
+          markedBy: admin._id.toString(),
+        });
+        marked += result.marked;
+      }
     }
   }
 
-  console.log(`  ${marked} record(s) marked across ${activities.length} activities`);
+  console.log(`  ${marked} attendance record(s) across ${activities.length} activities`);
 
   // --------------------------------------------------------- workshops ----
 

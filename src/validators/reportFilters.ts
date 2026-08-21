@@ -3,9 +3,11 @@ import {
   REVIEWER_TYPES,
   STUDENT_ACTIVITY_STATUSES,
   SUPPORT_ACTIVITY_STATUSES,
+  ATTENDANCE_MARKS,
   VENTURE_STATUSES,
 } from '@/lib/constants/status';
 import { ROLES, USER_STATUSES } from '@/lib/constants/roles';
+import { WORKSHOP_MODES, WORKSHOP_STATUSES, WORKSHOP_TYPES } from '@/lib/constants/workshops';
 import { objectId } from './common';
 
 /**
@@ -36,14 +38,19 @@ export const reportFilterSchema = z.object({
   facultyId: optionalId,
   mentorId: optionalId,
   studentVentureId: optionalId,
+  workshopId: optionalId,
 
   activityStatus: optionalEnum(STUDENT_ACTIVITY_STATUSES),
+  attendanceStatus: optionalEnum(ATTENDANCE_MARKS),
   supportStatus: optionalEnum(SUPPORT_ACTIVITY_STATUSES),
   ventureStatus: optionalEnum(VENTURE_STATUSES),
   userStatus: optionalEnum(USER_STATUSES),
   role: optionalEnum(ROLES),
   reviewerType: optionalEnum(REVIEWER_TYPES),
   reviewStatus: optionalEnum(['APPROVED', 'REVISION_REQUIRED', 'REJECTED']),
+  workshopType: optionalEnum(WORKSHOP_TYPES),
+  workshopMode: optionalEnum(WORKSHOP_MODES),
+  workshopStatus: optionalEnum(WORKSHOP_STATUSES),
 
   /** Inclusive date window, interpreted against each dataset's natural date. */
   dateFrom: z.coerce.date().optional().catch(undefined),

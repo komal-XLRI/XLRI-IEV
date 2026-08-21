@@ -26,6 +26,9 @@ import {
   termsDataset,
   venturesDataset,
   ventureActivitiesDataset,
+  ventureAttendanceDataset,
+  ventureAttendanceConsolidatedDataset,
+  workshopAttendanceDataset,
 } from './datasets/records';
 
 import {
@@ -60,6 +63,9 @@ const DATASETS: Record<string, DatasetDefinition<any>> = {
   [ventureActivitiesDataset.key]: ventureActivitiesDataset,
   [supportActivitiesDataset.key]: supportActivitiesDataset,
   [supportParticipationDataset.key]: supportParticipationDataset,
+  [ventureAttendanceDataset.key]: ventureAttendanceDataset,
+  [ventureAttendanceConsolidatedDataset.key]: ventureAttendanceConsolidatedDataset,
+  [workshopAttendanceDataset.key]: workshopAttendanceDataset,
   [subjectsDataset.key]: subjectsDataset,
   [sessionsDataset.key]: sessionsDataset,
   [termsDataset.key]: termsDataset,

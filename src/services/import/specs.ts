@@ -1,10 +1,12 @@
 import 'server-only';
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/db/mongoose';
-import { SupportActivity, Term, VentureActivity } from '@/models';
+import { StudentProfile, SupportActivity, Term, User, VentureActivity } from '@/models';
 import { createUser } from '@/services/users/userService';
 import { createSubject } from '@/services/academic/academicService';
 import { createVentureActivity } from '@/services/ventures/ventureActivityService';
+import { createStudentVenture } from '@/services/ventures/studentVentureService';
+import { VENTURE_STATUSES } from '@/lib/constants/status';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/errors';
 import type { ImportSpec } from '@/lib/import/types';
 
@@ -361,6 +363,216 @@ export const ventureActivityImport: ImportSpec<z.infer<typeof ventureActivityRow
   },
 };
 
+// ---------------------------------------------------------- Ventures ----
+
+/** An email column that may be left blank. */
+const optionalEmail = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(160)
+  .optional()
+  .transform((value) => (value === undefined || value === '' ? undefined : value))
+  .refine((value) => value === undefined || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value), {
+    message: 'Enter a valid email address',
+  });
+
+/**
+ * Accepts what a person would actually type.
+ *
+ * "On hold", "on-hold" and "ON_HOLD" are the same answer, and rejecting the
+ * first two would send an administrator back to a spreadsheet to fix a value
+ * that was never ambiguous.
+ */
+const ventureStatusField = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) =>
+    value === undefined || value === '' ? 'ACTIVE' : value.toUpperCase().replace(/[\s-]+/g, '_'),
+  )
+  .pipe(
+    z.enum(VENTURE_STATUSES, {
+      message: 'Use Active, On hold, Completed or Discontinued',
+    }),
+  );
+
+const ventureRow = z
+  .object({
+    rollNumber: optional(40),
+    studentEmail: optionalEmail,
+    ventureName: trimmed(160).min(1, 'Venture name is required'),
+    ventureTitle: optional(200),
+    industry: optional(120),
+    targetMarket: optional(200),
+    problemStatement: optional(4000),
+    solution: optional(4000),
+    fundingStatus: optional(120),
+    facultyEmail: optionalEmail,
+    mentorEmail: optionalEmail,
+    status: ventureStatusField,
+  })
+  .refine((row) => Boolean(row.rollNumber || row.studentEmail), {
+    message: 'Identify the student by roll number or by email',
+    path: ['rollNumber'],
+  });
+
+type VentureImportRow = z.infer<typeof ventureRow>;
+
+/**
+ * Finds the student a row is about.
+ *
+ * Either identifier will do, because a programme office keeps roll numbers and
+ * a mail directory keeps addresses, and which one a spreadsheet has depends on
+ * where it came from. When a row carries both they have to agree: two
+ * identifiers pointing at different people is the signature of a column
+ * shifted by one, and importing that would attach ventures to the wrong
+ * students without a word.
+ */
+async function resolveStudent(row: VentureImportRow): Promise<string> {
+  if (row.rollNumber) {
+    // Stored upper-cased by the profile schema.
+    const profile = await StudentProfile.findOne({ rollNumber: row.rollNumber.toUpperCase() })
+      .select('userId')
+      .lean()
+      .exec();
+
+    if (!profile) throw new NotFoundError(`No student has the roll number "${row.rollNumber}"`);
+
+    const student = await User.findById(profile.userId).select('email role').lean().exec();
+    if (!student || student.role !== 'STUDENT') {
+      throw new ValidationError(
+        `Roll number "${row.rollNumber}" does not belong to a student account`,
+      );
+    }
+
+    if (row.studentEmail && student.email.toLowerCase() !== row.studentEmail) {
+      throw new ValidationError(
+        `Roll number "${row.rollNumber}" belongs to ${student.email}, not ${row.studentEmail} — check that the columns line up`,
+      );
+    }
+
+    return profile.userId.toString();
+  }
+
+  const student = await User.findOne({ email: row.studentEmail }).select('_id role').lean().exec();
+  if (!student) throw new NotFoundError(`No account has the email "${row.studentEmail}"`);
+  if (student.role !== 'STUDENT') {
+    throw new ValidationError(`${row.studentEmail} is not a student account`);
+  }
+
+  return student._id.toString();
+}
+
+/** Reviewers are named by email, because two people can share a name. */
+async function resolveReviewer(email: string, role: 'FACULTY' | 'MENTOR'): Promise<string> {
+  const user = await User.findOne({ email }).select('_id role').lean().exec();
+  if (!user) throw new NotFoundError(`No account has the email "${email}"`);
+
+  if (user.role !== role) {
+    throw new ValidationError(
+      `${email} is a ${user.role.toLowerCase()} account, so it cannot be assigned as the ${role.toLowerCase()}`,
+    );
+  }
+
+  return user._id.toString();
+}
+
+export const ventureImport: ImportSpec<VentureImportRow> = {
+  key: 'ventures',
+  title: 'Import ventures',
+  description:
+    'Creates one venture per student, with its activity records. Naming a faculty member and a mentor here is what grants them review rights.',
+  roles: ['ADMIN'],
+  columns: [
+    {
+      field: 'rollNumber',
+      label: 'Roll Number',
+      required: false,
+      example: 'IEV101',
+      hint: 'Roll number or student email — either one identifies the student',
+    },
+    {
+      field: 'studentEmail',
+      label: 'Student Email',
+      required: false,
+      example: 'asha@programme.edu',
+      hint: 'Used when there is no roll number; must agree if both are given',
+    },
+    { field: 'ventureName', label: 'Venture Name', required: true, example: 'Kirana Connect' },
+    {
+      field: 'ventureTitle',
+      label: 'Tagline',
+      required: false,
+      example: 'Neighbourhood stores, online',
+    },
+    { field: 'industry', label: 'Industry', required: false, example: 'Retail technology' },
+    {
+      field: 'targetMarket',
+      label: 'Target Market',
+      required: false,
+      example: 'Tier-2 city kirana stores',
+    },
+    { field: 'problemStatement', label: 'Problem', required: false, example: '' },
+    { field: 'solution', label: 'Solution', required: false, example: '' },
+    { field: 'fundingStatus', label: 'Funding', required: false, example: 'Bootstrapped' },
+    {
+      field: 'facultyEmail',
+      label: 'Faculty Email',
+      required: false,
+      example: 'meera@programme.edu',
+      hint: 'Grants review rights — leave blank to assign later',
+    },
+    {
+      field: 'mentorEmail',
+      label: 'Mentor Email',
+      required: false,
+      example: 'rahul@industry.com',
+      hint: 'Grants review rights — leave blank to assign later',
+    },
+    {
+      field: 'status',
+      label: 'Status',
+      required: false,
+      example: 'Active',
+      hint: 'Active, On hold, Completed or Discontinued — defaults to Active',
+    },
+  ],
+  schema: ventureRow,
+  // One venture per student, so the same student twice in one file is a
+  // mistake worth catching before half of it has been written.
+  validateBatch: (rows) => [
+    ...duplicateBy<VentureImportRow>((row) => row.rollNumber ?? '', 'roll number')(rows),
+    ...duplicateBy<VentureImportRow>((row) => row.studentEmail ?? '', 'student email')(rows),
+  ],
+  commit: async (row) => {
+    await connectToDatabase();
+
+    const studentId = await resolveStudent(row);
+
+    const [facultyId, mentorId] = await Promise.all([
+      row.facultyEmail ? resolveReviewer(row.facultyEmail, 'FACULTY') : undefined,
+      row.mentorEmail ? resolveReviewer(row.mentorEmail, 'MENTOR') : undefined,
+    ]);
+
+    // The same service call the form makes, so an imported venture is checked
+    // for uniqueness and gets its activity records bootstrapped identically.
+    await createStudentVenture({
+      studentId,
+      ventureName: row.ventureName,
+      ventureTitle: row.ventureTitle,
+      industry: row.industry,
+      targetMarket: row.targetMarket,
+      problemStatement: row.problemStatement,
+      solution: row.solution,
+      fundingStatus: row.fundingStatus,
+      facultyId,
+      mentorId,
+      status: row.status,
+    });
+  },
+};
+
 // ------------------------------------------------------------ Registry ----
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- heterogeneous by design; each spec is internally typed.
@@ -370,6 +582,7 @@ const SPECS: Record<string, ImportSpec<any>> = {
   [mentorImport.key]: mentorImport,
   [subjectImport.key]: subjectImport,
   [ventureActivityImport.key]: ventureActivityImport,
+  [ventureImport.key]: ventureImport,
 };
 
 export const IMPORT_KEYS = Object.keys(SPECS);

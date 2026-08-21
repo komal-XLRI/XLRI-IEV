@@ -23,8 +23,6 @@ export function toTimelineRow(entry: VentureActivityProgress): TimelineRow {
     uiState: entry.uiState,
     unlocked: entry.unlocked,
 
-    attendanceStatus: record.attendanceStatus,
-
     facultyReviewStatus: record.facultyReviewStatus,
     mentorReviewStatus: record.mentorReviewStatus,
     reviewSummary: entry.reviewSummary,

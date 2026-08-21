@@ -76,7 +76,9 @@ export function SubmitButton({
   const { pending } = useFormStatus();
 
   return (
-    <Button type="submit" disabled={pending || props.disabled} {...props}>
+    // The spread comes first: with it last, a caller passing `disabled={false}`
+    // would overwrite the in-flight guard and leave the button live mid-submit.
+    <Button type="submit" {...props} disabled={pending || props.disabled}>
       {pending ? (pendingLabel ?? 'Working…') : children}
     </Button>
   );
