@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, type LucideIcon } from 'lucide-react';
 import { Button, SubmitButton } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { ActionForm, type FormAction } from '@/components/forms/ActionForm';
@@ -27,6 +27,8 @@ export function RecordDialog<T>({
   action,
   children,
   size = 'lg',
+  triggerIcon: TriggerIcon = Plus,
+  triggerVariant = 'primary',
 }: {
   title: string;
   description?: string;
@@ -36,14 +38,17 @@ export function RecordDialog<T>({
   action: FormAction<T>;
   children: (state: { fieldErrors?: Record<string, string> }) => ReactNode;
   size?: 'sm' | 'md' | 'lg';
+  /** Editing is not creating, and the trigger should not claim it is. */
+  triggerIcon?: LucideIcon;
+  triggerVariant?: 'primary' | 'secondary' | 'ghost';
 }) {
   const [open, setOpen] = useState(false);
   const { notify } = useToast();
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <Plus className="size-3.5" aria-hidden="true" />
+      <Button size="sm" variant={triggerVariant} onClick={() => setOpen(true)}>
+        <TriggerIcon className="size-3.5" aria-hidden="true" />
         {triggerLabel}
       </Button>
 

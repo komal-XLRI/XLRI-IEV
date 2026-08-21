@@ -190,6 +190,12 @@ export async function createStudentVentureAction(
   });
 }
 
+/** The raw value of a field that was on the form; undefined if it was not. */
+function submitted(formData: FormData, key: string): string | undefined {
+  const raw = formData.get(key);
+  return typeof raw === 'string' ? raw.trim() : undefined;
+}
+
 export async function updateStudentVentureAction(
   _prev: unknown,
   formData: FormData,
@@ -199,14 +205,19 @@ export async function updateStudentVentureAction(
 
     const studentVentureId = objectId.parse(value(formData, 'studentVentureId'));
 
+    // `submitted` keeps an empty field as '' rather than folding it to
+    // undefined: on an edit form the two mean opposite things — "clear this"
+    // and "this was not on the form" — and `value` cannot tell them apart, so
+    // erasing a tagline used to be silently ignored.
     const input = updateStudentVentureSchema.parse({
-      ventureName: value(formData, 'ventureName'),
-      ventureTitle: value(formData, 'ventureTitle'),
-      industry: value(formData, 'industry'),
-      targetMarket: value(formData, 'targetMarket'),
-      problemStatement: value(formData, 'problemStatement'),
-      solution: value(formData, 'solution'),
-      fundingStatus: value(formData, 'fundingStatus'),
+      ventureName: submitted(formData, 'ventureName'),
+      ventureTitle: submitted(formData, 'ventureTitle'),
+      industry: submitted(formData, 'industry'),
+      targetMarket: submitted(formData, 'targetMarket'),
+      problemStatement: submitted(formData, 'problemStatement'),
+      solution: submitted(formData, 'solution'),
+      fundingStatus: submitted(formData, 'fundingStatus'),
+      // An enum has no empty member, so this one still folds to undefined.
       status: value(formData, 'status'),
     });
 

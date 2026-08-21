@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/Badge';
 import { useToast } from '@/components/ui/Toast';
 import { RecordDialog } from './RecordDialog';
 import { createUserAction, setUserStatusAction } from '@/app/actions/adminUsers';
+import { EditUserForm } from './EditUserForm';
 import { formatDate } from '@/lib/utils/dates';
 import type { Role } from '@/lib/constants/roles';
 
@@ -24,6 +25,11 @@ export interface DirectoryUser {
   createdAt: string;
   detail?: string;
   batch?: string;
+  /**
+   * Role profile fields, flattened to strings, so a row can be edited in place
+   * without a second round trip to fetch what the form should prefill.
+   */
+  profile?: Record<string, string>;
 }
 
 const STATUS_TONE = {
@@ -190,6 +196,17 @@ export function UserDirectory({
                 View
               </Link>
             ) : null}
+            <EditUserForm
+              role={role}
+              user={{
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone ?? '',
+                status: user.status,
+                profile: user.profile ?? {},
+              }}
+            />
             <StatusAction user={user} role={role} />
           </div>
         ),

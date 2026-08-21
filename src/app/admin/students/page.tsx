@@ -39,7 +39,7 @@ export default async function AdminStudentsPage({
   ]);
 
   const profiles = await StudentProfile.find({ userId: { $in: items.map((u) => u._id) } })
-    .select('userId rollNumber batch cluster')
+    .select('userId rollNumber batch cluster background strengths weakness personalContext')
     .lean()
     .exec();
   const profileByUser = new Map(profiles.map((p) => [p.userId.toString(), p]));
@@ -57,6 +57,16 @@ export default async function AdminStudentsPage({
       createdAt: user.createdAt.toISOString(),
       batch: profile?.batch,
       detail: profile ? `${profile.rollNumber} · ${profile.batch}` : undefined,
+      // Carried so a row can be edited without fetching the profile again.
+      profile: {
+        rollNumber: profile?.rollNumber ?? '',
+        batch: profile?.batch ?? '',
+        cluster: profile?.cluster ?? '',
+        background: profile?.background ?? '',
+        strengths: profile?.strengths ?? '',
+        weakness: profile?.weakness ?? '',
+        personalContext: profile?.personalContext ?? '',
+      },
     };
   });
 

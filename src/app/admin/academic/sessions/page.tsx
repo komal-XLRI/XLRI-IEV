@@ -8,7 +8,8 @@ import { listSessions, listSubjects } from '@/services/academic/academicService'
 import { listSupportActivities } from '@/services/ventures/ventureActivityService';
 import { listReviewersByRole } from '@/services/users/userService';
 import { SessionForm } from '@/components/admin/SessionForm';
-import { formatDate } from '@/lib/utils/dates';
+import { EditSessionForm } from '@/components/admin/EditSessionForm';
+import { formatDate, toDateInputValue } from '@/lib/utils/dates';
 import { humanise } from '@/lib/utils/humanise';
 import { serialize } from '@/lib/utils/serialize';
 import { ExportMenu } from '@/components/export/ExportMenu';
@@ -24,6 +25,18 @@ export default async function AdminSessionsPage() {
     listSupportActivities(),
   ]);
 
+  // Shared by the create dialog and every row's edit dialog, so the two can
+  // never offer different people or activities.
+  const facultyOptions = serialize(faculty).map((person) => ({
+    _id: person._id,
+    name: person.name,
+  }));
+  const supportOptions = serialize(supports).map((support) => ({
+    _id: support._id,
+    activityCode: support.activityCode,
+    name: support.name,
+  }));
+
   const columns: DataColumn[] = [
     { key: 'date', header: 'Date' },
     { key: 'time', header: 'Time', hideBelow: 'sm' },
@@ -32,6 +45,7 @@ export default async function AdminSessionsPage() {
     { key: 'type', header: 'Type', hideBelow: 'lg' },
     { key: 'support', header: 'Support activity' },
     { key: 'topic', header: 'Topic', hideBelow: 'xl', clamp: true, toggleable: true },
+    { key: 'actions', header: '', align: 'right', sortable: false },
   ];
 
   return (
@@ -118,6 +132,27 @@ export default async function AdminSessionsPage() {
                 : '',
             },
             textCell(session.topic),
+            {
+              node: (
+                <EditSessionForm
+                  session={{
+                    _id: session._id.toString(),
+                    subjectLabel:
+                      `${session.subjectId?.code ?? ''} ${session.subjectId?.name ?? ''}`.trim(),
+                    facultyId: session.facultyId?._id?.toString() ?? '',
+                    date: toDateInputValue(session.date),
+                    startTime: session.startTime,
+                    endTime: session.endTime,
+                    sessionType: session.sessionType,
+                    supportActivityId: session.supportActivityId?._id?.toString() ?? '',
+                    topic: session.topic ?? '',
+                    notes: session.notes ?? '',
+                  }}
+                  faculty={facultyOptions}
+                  supportActivities={supportOptions}
+                />
+              ),
+            },
           ],
         }))}
       />

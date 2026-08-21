@@ -22,6 +22,7 @@ import { describeReviewProgress } from '@/lib/rules/dualReview';
 import type { UiActivityState, VentureStatus } from '@/lib/constants/status';
 import type { AssignReviewersInput, CreateStudentVentureInput } from '@/validators/ventures';
 import { logger } from '@/lib/logger';
+import { splitUpdate } from '@/lib/db/updateDoc';
 
 // ------------------------------------------------------------ Ventures ----
 
@@ -91,7 +92,10 @@ export async function listVentures(
   // table shows — searching only `ventureName` misses a search by student.
   if (filters.q) {
     const pattern = containsPattern(filters.q);
-    const students = await User.find({ role: 'STUDENT', $or: [{ name: pattern }, { email: pattern }] })
+    const students = await User.find({
+      role: 'STUDENT',
+      $or: [{ name: pattern }, { email: pattern }],
+    })
       .select('_id')
       .lean()
       .exec();
@@ -164,21 +168,36 @@ export async function createStudentVenture(input: CreateStudentVentureInput) {
   });
 }
 
+/**
+ * Edits a venture's own details. Reviewers are assigned elsewhere.
+ *
+ * A field submitted empty means "remove this", not "store an empty string".
+ * Without the split an administrator clearing a tagline would leave a blank
+ * behind, and every `value || '—'` on every screen would then treat that blank
+ * as a real answer rather than a missing one.
+ */
 export async function updateStudentVenture(
   studentVentureId: string,
   input: Record<string, unknown>,
 ) {
   await connectToDatabase();
 
-  const updated = await StudentVenture.findByIdAndUpdate(
-    studentVentureId,
-    { $set: input },
-    { returnDocument: 'after', runValidators: true },
-  )
+  const update = splitUpdate(input);
+
+  const updated = await StudentVenture.findByIdAndUpdate(studentVentureId, update, {
+    returnDocument: 'after',
+    runValidators: true,
+  })
     .lean()
     .exec();
 
   if (!updated) throw new NotFoundError('Venture not found');
+
+  logger.info('Venture updated', {
+    ventureId: studentVentureId,
+    fields: Object.keys(input),
+  });
+
   return updated;
 }
 

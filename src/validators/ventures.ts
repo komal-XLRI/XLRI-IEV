@@ -101,7 +101,7 @@ export const setSupportMappingsSchema = z.object({
 
 export const createStudentVentureSchema = z.object({
   studentId: objectId,
-  ventureName: z.string().trim().min(1).max(160),
+  ventureName: z.string().trim().min(1, 'Venture name is required').max(160),
   ventureTitle: z.string().trim().max(200).optional().or(z.literal('')),
   industry: z.string().trim().max(120).optional().or(z.literal('')),
   targetMarket: z.string().trim().max(200).optional().or(z.literal('')),

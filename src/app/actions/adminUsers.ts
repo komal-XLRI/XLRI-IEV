@@ -65,6 +65,12 @@ export async function createUserAction(
   });
 }
 
+/** The raw value of a field that was on the form; undefined if it was not. */
+function submitted(formData: FormData, key: string): string | undefined {
+  const raw = formData.get(key);
+  return typeof raw === 'string' ? raw.trim() : undefined;
+}
+
 export async function updateUserAction(
   _prev: unknown,
   formData: FormData,
@@ -74,25 +80,31 @@ export async function updateUserAction(
 
     const userId = objectId.parse(formValue(formData, 'userId'));
 
+    // `submitted` keeps an empty field as '' rather than folding it to
+    // undefined: on an edit form those mean opposite things — "clear this" and
+    // "this field was not on the form" — and only a field that was actually
+    // shown should ever be changed. That is what lets one dialog serve three
+    // roles without a mentor's blank fields wiping a student's.
     const input = updateUserSchema.parse({
-      name: formValue(formData, 'name'),
-      phone: formValue(formData, 'phone'),
+      name: submitted(formData, 'name'),
+      phone: submitted(formData, 'phone'),
+      // An enum has no empty member, so this one still folds to undefined.
       status: formValue(formData, 'status'),
       profile: {
-        rollNumber: formValue(formData, 'rollNumber'),
-        batch: formValue(formData, 'batch'),
-        cluster: formValue(formData, 'cluster'),
-        background: formValue(formData, 'background'),
-        strengths: formValue(formData, 'strengths'),
-        weakness: formValue(formData, 'weakness'),
-        personalContext: formValue(formData, 'personalContext'),
-        designation: formValue(formData, 'designation'),
-        department: formValue(formData, 'department'),
-        specialization: formValue(formData, 'specialization'),
-        company: formValue(formData, 'company'),
-        industry: formValue(formData, 'industry'),
-        expertise: formValue(formData, 'expertise'),
-        bio: formValue(formData, 'bio'),
+        rollNumber: submitted(formData, 'rollNumber'),
+        batch: submitted(formData, 'batch'),
+        cluster: submitted(formData, 'cluster'),
+        background: submitted(formData, 'background'),
+        strengths: submitted(formData, 'strengths'),
+        weakness: submitted(formData, 'weakness'),
+        personalContext: submitted(formData, 'personalContext'),
+        designation: submitted(formData, 'designation'),
+        department: submitted(formData, 'department'),
+        specialization: submitted(formData, 'specialization'),
+        company: submitted(formData, 'company'),
+        industry: submitted(formData, 'industry'),
+        expertise: submitted(formData, 'expertise'),
+        bio: submitted(formData, 'bio'),
       },
     });
 

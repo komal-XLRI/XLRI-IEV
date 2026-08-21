@@ -33,7 +33,7 @@ export default async function AdminFacultyPage({
   });
 
   const profiles = await FacultyProfile.find({ userId: { $in: items.map((u) => u._id) } })
-    .select('userId designation department')
+    .select('userId designation department specialization bio')
     .lean()
     .exec();
   const byUser = new Map(profiles.map((p) => [p.userId.toString(), p]));
@@ -49,6 +49,12 @@ export default async function AdminFacultyPage({
       status: user.status,
       createdAt: user.createdAt.toISOString(),
       detail: detail || undefined,
+      profile: {
+        designation: profile?.designation ?? '',
+        department: profile?.department ?? '',
+        specialization: profile?.specialization ?? '',
+        bio: profile?.bio ?? '',
+      },
     };
   });
 

@@ -32,7 +32,7 @@ export default async function AdminMentorsPage({
   });
 
   const profiles = await MentorProfile.find({ userId: { $in: items.map((u) => u._id) } })
-    .select('userId company industry')
+    .select('userId company industry designation expertise bio')
     .lean()
     .exec();
   const byUser = new Map(profiles.map((p) => [p.userId.toString(), p]));
@@ -48,6 +48,13 @@ export default async function AdminMentorsPage({
       status: user.status,
       createdAt: user.createdAt.toISOString(),
       detail: detail || undefined,
+      profile: {
+        company: profile?.company ?? '',
+        designation: profile?.designation ?? '',
+        industry: profile?.industry ?? '',
+        expertise: profile?.expertise ?? '',
+        bio: profile?.bio ?? '',
+      },
     };
   });
 

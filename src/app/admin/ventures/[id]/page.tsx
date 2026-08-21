@@ -8,6 +8,7 @@ import { getVentureDetail, getVentureProgress } from '@/services/ventures/studen
 import { toTimeline } from '@/services/ventures/timeline';
 import { listReviewersByRole } from '@/services/users/userService';
 import { AssignReviewersForm } from '@/components/admin/AssignReviewersForm';
+import { EditVentureForm } from '@/components/admin/EditVentureForm';
 import { getStudentSupportActivities } from '@/services/support/supportService';
 import { serialize } from '@/lib/utils/serialize';
 import { isValidObjectId } from '@/lib/utils/ids';
@@ -36,15 +37,33 @@ export default async function AdminVentureDetailPage({
   const rows = toTimeline(progress);
   const completed = rows.filter((r) => r.status === 'COMPLETED').length;
 
+  // Flattened for the edit form, which is a client component: every field is a
+  // string so an untouched one round-trips unchanged rather than arriving as
+  // undefined and reading as "clear this".
+  const details = {
+    studentVentureId: id,
+    ventureName: venture.ventureName,
+    ventureTitle: venture.ventureTitle ?? '',
+    industry: venture.industry ?? '',
+    targetMarket: venture.targetMarket ?? '',
+    problemStatement: venture.problemStatement ?? '',
+    solution: venture.solution ?? '',
+    fundingStatus: venture.fundingStatus ?? '',
+    status: venture.status,
+  };
+
   return (
     <>
       <PageHeader
         title={venture.ventureName}
         description={`${venture.studentId?.name ?? 'Unknown student'} · ${venture.studentId?.email ?? ''}`}
         action={
-          <Link href="/admin/ventures" className="text-primary text-sm hover:underline">
-            Back to ventures
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/admin/ventures" className="text-primary text-sm hover:underline">
+              Back to ventures
+            </Link>
+            <EditVentureForm venture={details} />
+          </div>
         }
       />
 
@@ -103,7 +122,7 @@ export default async function AdminVentureDetailPage({
           />
 
           <Card>
-            <CardHeader title="Venture details" />
+            <CardHeader title="Venture details" action={<EditVentureForm venture={details} />} />
             <CardBody className="space-y-3 text-sm">
               <Detail label="Industry" value={venture.industry} />
               <Detail label="Target market" value={venture.targetMarket} />

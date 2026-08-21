@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { getSubjectFaculty, listSubjects, listTerms } from '@/services/academic/academicService';
 import { listReviewersByRole } from '@/services/users/userService';
 import { SubjectForm } from '@/components/admin/SubjectForm';
+import { EditSubjectForm } from '@/components/admin/EditSubjectForm';
 import { SubjectFacultyPicker } from '@/components/admin/SubjectFacultyPicker';
 import { serialize } from '@/lib/utils/serialize';
 import { ExportMenu } from '@/components/export/ExportMenu';
@@ -52,6 +53,7 @@ export default async function AdminSubjectsPage() {
     { key: 'credits', header: 'Credits', align: 'right', hideBelow: 'sm' },
     { key: 'status', header: 'Status' },
     { key: 'faculty', header: 'Teaching faculty', sortable: false },
+    { key: 'actions', header: '', align: 'right', sortable: false },
   ];
 
   return (
@@ -120,6 +122,23 @@ export default async function AdminSubjectsPage() {
                   text: (rosterBySubject.get(id) ?? [])
                     .map((facultyId) => facultyOptions.find((f) => f._id === facultyId)?.name ?? '')
                     .join(' '),
+                },
+                {
+                  node: (
+                    <EditSubjectForm
+                      terms={termOptions}
+                      subject={{
+                        _id: id,
+                        code: subject.code,
+                        name: subject.name,
+                        termId: subject.termId?._id?.toString() ?? '',
+                        credits: String(subject.credits ?? ''),
+                        area: subject.area ?? '',
+                        description: subject.description ?? '',
+                        status: subject.status,
+                      }}
+                    />
+                  ),
                 },
               ],
             };

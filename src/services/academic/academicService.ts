@@ -11,6 +11,7 @@ import {
   User,
 } from '@/models';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/errors';
+import { splitUpdate } from '@/lib/db/updateDoc';
 import { EXPERT_WORKSHOP_CODE } from '@/lib/constants/activities';
 import type {
   CreateSubjectInput,
@@ -109,11 +110,10 @@ export async function updateSubject(subjectId: string, input: Partial<CreateSubj
   }
   if (input.termId) await getTerm(input.termId);
 
-  const subject = await Subject.findByIdAndUpdate(
-    subjectId,
-    { $set: input },
-    { returnDocument: 'after', runValidators: true },
-  )
+  const subject = await Subject.findByIdAndUpdate(subjectId, splitUpdate(input), {
+    returnDocument: 'after',
+    runValidators: true,
+  })
     .lean()
     .exec();
 
@@ -258,11 +258,10 @@ export async function createSubjectSession(input: CreateSubjectSessionInput) {
 export async function updateSubjectSession(sessionId: string, input: Record<string, unknown>) {
   await connectToDatabase();
 
-  const updated = await SubjectSession.findByIdAndUpdate(
-    sessionId,
-    { $set: input },
-    { returnDocument: 'after', runValidators: true },
-  )
+  const updated = await SubjectSession.findByIdAndUpdate(sessionId, splitUpdate(input), {
+    returnDocument: 'after',
+    runValidators: true,
+  })
     .lean()
     .exec();
 
