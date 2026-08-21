@@ -84,6 +84,18 @@ export async function createSubjectAction(
   });
 }
 
+/**
+ * The raw value of a field that was on the form; undefined if it was not.
+ *
+ * On an edit form an empty field and an absent field mean opposite things —
+ * "clear this" and "this was not shown" — and `value` folds both to undefined,
+ * so a description you deleted would quietly come back.
+ */
+function submitted(formData: FormData, key: string): string | undefined {
+  const raw = formData.get(key);
+  return typeof raw === 'string' ? raw.trim() : undefined;
+}
+
 export async function updateSubjectAction(
   _prev: unknown,
   formData: FormData,
@@ -93,12 +105,13 @@ export async function updateSubjectAction(
 
     const subjectId = objectId.parse(value(formData, 'subjectId'));
     const input = updateSubjectSchema.parse({
-      code: value(formData, 'code'),
-      name: value(formData, 'name'),
+      code: submitted(formData, 'code'),
+      name: submitted(formData, 'name'),
       credits: value(formData, 'credits'),
-      area: value(formData, 'area'),
+      area: submitted(formData, 'area'),
+      // Ids and enums have no empty member, so these still fold to undefined.
       termId: value(formData, 'termId'),
-      description: value(formData, 'description'),
+      description: submitted(formData, 'description'),
       status: value(formData, 'status'),
     });
 
@@ -184,9 +197,10 @@ export async function updateSessionAction(
       startTime: value(formData, 'startTime'),
       endTime: value(formData, 'endTime'),
       sessionType: value(formData, 'sessionType'),
+      // Already explicit: "None" is a real choice here, so it clears the link.
       supportActivityId: value(formData, 'supportActivityId') ?? null,
-      topic: value(formData, 'topic'),
-      notes: value(formData, 'notes'),
+      topic: submitted(formData, 'topic'),
+      notes: submitted(formData, 'notes'),
     });
 
     const clean = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));

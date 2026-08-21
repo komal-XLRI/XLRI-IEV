@@ -13,6 +13,7 @@ import type {
   UpdateUserInput,
 } from '@/validators/users';
 import { logger } from '@/lib/logger';
+import { splitUpdate } from '@/lib/db/updateDoc';
 
 function blankToUndefined<T extends Record<string, unknown>>(input: T): Partial<T> {
   const output: Record<string, unknown> = {};
@@ -48,7 +49,10 @@ const PROFILE_SEARCH_FIELDS = {
 } as const;
 
 /** User ids whose role profile matches `q` on any of its searchable fields. */
-async function userIdsMatchingProfile(role: Role | undefined, q: string): Promise<Types.ObjectId[]> {
+async function userIdsMatchingProfile(
+  role: Role | undefined,
+  q: string,
+): Promise<Types.ObjectId[]> {
   if (role !== 'STUDENT' && role !== 'FACULTY' && role !== 'MENTOR') return [];
 
   const pattern = containsPattern(q);
@@ -225,17 +229,25 @@ export async function updateUser(userId: string, input: UpdateUserInput) {
   await user.save();
 
   if (input.profile) {
-    const patch = blankToUndefined(input.profile);
+    // An empty field clears it. The schema still refuses to blank a required
+    // one — an empty roll number is a validation error long before it gets
+    // here, which is what keeps `$unset` from breaking a profile.
+    const patch = splitUpdate(input.profile);
+
+    // Branched rather than a shared variable: the three models have different
+    // document types, and a union of them is not callable.
     if (Object.keys(patch).length > 0) {
       if (user.role === 'STUDENT') {
-        await StudentProfile.updateOne({ userId }, { $set: patch }, { upsert: false }).exec();
+        await StudentProfile.updateOne({ userId }, patch, { upsert: false }).exec();
       } else if (user.role === 'FACULTY') {
-        await FacultyProfile.updateOne({ userId }, { $set: patch }, { upsert: false }).exec();
+        await FacultyProfile.updateOne({ userId }, patch, { upsert: false }).exec();
       } else if (user.role === 'MENTOR') {
-        await MentorProfile.updateOne({ userId }, { $set: patch }, { upsert: false }).exec();
+        await MentorProfile.updateOne({ userId }, patch, { upsert: false }).exec();
       }
     }
   }
+
+  logger.info('User updated', { userId, role: user.role });
 
   return { userId };
 }
