@@ -16,7 +16,32 @@ export interface ParsedCsv {
   lineNumbers: number[];
 }
 
-export function parseCsvRows(input: string): string[][] {
+/**
+ * Guesses the separator a pasted block uses.
+ *
+ * Copying a range out of Excel or Google Sheets puts tabs on the clipboard,
+ * not commas, and an administrator pasting that into a box labelled CSV has
+ * done nothing wrong. Only the header line is counted, deliberately: a comma
+ * inside a quoted address further down should not outvote the real separator.
+ */
+export type Delimiter = ',' | '\t' | ';';
+
+export function sniffDelimiter(input: string): Delimiter {
+  const firstLine = input.replace(/^﻿/, '').split(/\r?\n/, 1)[0] ?? '';
+
+  const count = (pattern: RegExp) => (firstLine.match(pattern) ?? []).length;
+
+  const comma = count(/,/g);
+  const tab = count(/\t/g);
+  const semicolon = count(/;/g);
+
+  // Commas win ties: it is the documented format and what the template uses.
+  if (tab > comma && tab >= semicolon) return '\t';
+  if (semicolon > comma) return ';';
+  return ',';
+}
+
+export function parseCsvRows(input: string, delimiter: string = ','): string[][] {
   const text = input.replace(/^﻿/, '');
   const rows: string[][] = [];
 
@@ -62,7 +87,7 @@ export function parseCsvRows(input: string): string[][] {
       continue;
     }
 
-    if (char === ',') {
+    if (char === delimiter) {
       endField();
       index += 1;
       continue;
@@ -107,21 +132,54 @@ export function normaliseHeader(header: string): string {
  * all resolve to the same field, because administrators build these files in
  * Excel by hand.
  */
-export function parseCsv(input: string, expected: string[]): ParsedCsv {
-  const raw = parseCsvRows(input);
+/**
+ * A field the import wants, and the heading a person would write for it.
+ *
+ * Both are matched, because they are routinely different words: the venture
+ * template heads its `fundingStatus` column "Funding" and its
+ * `problemStatement` column "Problem". Matching on the field name alone meant
+ * those columns were read as absent and silently dropped — from files this
+ * system had produced itself.
+ */
+export type ExpectedColumn = string | { field: string; label?: string };
 
+function expectationFor(entry: ExpectedColumn): { field: string; aliases: string[] } {
+  if (typeof entry === 'string') return { field: entry, aliases: [entry] };
+  return { field: entry.field, aliases: entry.label ? [entry.field, entry.label] : [entry.field] };
+}
+
+export function parseCsv(input: string, expected: ExpectedColumn[]): ParsedCsv {
+  return parseGrid(parseCsvRows(input, sniffDelimiter(input)), expected);
+}
+
+/**
+ * Maps an already-split grid onto the expected fields.
+ *
+ * Separated from the CSV reader so a spreadsheet can use the same path: an
+ * .xlsx worksheet arrives as rows of cells having never been text, and header
+ * matching, blank-row skipping and line numbering should not be written twice.
+ */
+export function parseGrid(raw: string[][], expected: ExpectedColumn[]): ParsedCsv {
   if (raw.length === 0) {
     return { headers: [], rows: [], lineNumbers: [] };
   }
 
   const headerRow = raw[0]!.map((cell) => cell.replace(/^\t/, '').trim());
   const normalised = headerRow.map(normaliseHeader);
+  const wanted = expected.map(expectationFor);
 
-  // Map each expected field to the column index that supplies it.
+  // Map each expected field to the column index that supplies it. The field
+  // name is tried first, so a machine-written header keeps winning over a
+  // label that happens to collide with it.
   const columnFor = new Map<string, number>();
-  for (const field of expected) {
-    const index = normalised.indexOf(normaliseHeader(field));
-    if (index !== -1) columnFor.set(field, index);
+  for (const { field, aliases } of wanted) {
+    for (const alias of aliases) {
+      const index = normalised.indexOf(normaliseHeader(alias));
+      if (index !== -1) {
+        columnFor.set(field, index);
+        break;
+      }
+    }
   }
 
   const rows: Array<Record<string, string>> = [];
@@ -134,7 +192,7 @@ export function parseCsv(input: string, expected: string[]): ParsedCsv {
     if (cells.every((cell) => cell.trim() === '')) continue;
 
     const record: Record<string, string> = {};
-    for (const field of expected) {
+    for (const { field } of wanted) {
       const index = columnFor.get(field);
       const value = index === undefined ? '' : (cells[index] ?? '');
       record[field] = value.replace(/^\t/, '').trim();
@@ -148,10 +206,12 @@ export function parseCsv(input: string, expected: string[]): ParsedCsv {
 }
 
 /** Detects whether a header row is present at all. */
-export function hasRecognisableHeader(input: string, expected: string[]): boolean {
-  const raw = parseCsvRows(input);
+export function hasRecognisableHeader(input: string, expected: ExpectedColumn[]): boolean {
+  const raw = parseCsvRows(input, sniffDelimiter(input));
   if (raw.length === 0) return false;
 
   const normalised = raw[0]!.map(normaliseHeader);
-  return expected.some((field) => normalised.includes(normaliseHeader(field)));
+  return expected
+    .map(expectationFor)
+    .some(({ aliases }) => aliases.some((alias) => normalised.includes(normaliseHeader(alias))));
 }

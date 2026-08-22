@@ -35,7 +35,6 @@ export interface WorkshopValues {
   speakerDesignation: string;
   speakerOrganisation: string;
   speakerLinkedIn: string;
-  registrationLink: string;
   maxParticipants: string;
   status: string;
 }
@@ -58,7 +57,6 @@ export const EMPTY_WORKSHOP: WorkshopValues = {
   speakerDesignation: '',
   speakerOrganisation: '',
   speakerLinkedIn: '',
-  registrationLink: '',
   maxParticipants: '',
   status: 'DRAFT',
 };
@@ -257,22 +255,6 @@ export function WorkshopFields({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
-          label="Registration link"
-          htmlFor="registrationLink"
-          error={fieldErrors?.registrationLink}
-        >
-          <TextInput
-            id="registrationLink"
-            name="registrationLink"
-            type="url"
-            inputMode="url"
-            maxLength={500}
-            defaultValue={values.registrationLink}
-            placeholder="https://forms.office.com/…"
-          />
-        </Field>
-
-        <Field
           label="Maximum participants"
           htmlFor="maxParticipants"
           hint="Leave blank for no cap."
@@ -345,7 +327,11 @@ function PersonBlock({
           />
         </Field>
 
-        <Field label="Organisation" htmlFor={organisationKey} error={fieldErrors?.[organisationKey]}>
+        <Field
+          label="Organisation"
+          htmlFor={organisationKey}
+          error={fieldErrors?.[organisationKey]}
+        >
           <TextInput
             id={organisationKey}
             name={organisationKey}

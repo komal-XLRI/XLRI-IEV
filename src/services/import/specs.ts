@@ -1,11 +1,22 @@
 import 'server-only';
 import { z } from 'zod';
 import { connectToDatabase } from '@/lib/db/mongoose';
-import { StudentProfile, SupportActivity, Term, User, VentureActivity } from '@/models';
+import {
+  StudentProfile,
+  StudentVenture,
+  SupportActivity,
+  Term,
+  User,
+  VentureActivity,
+} from '@/models';
 import { createUser } from '@/services/users/userService';
 import { createSubject } from '@/services/academic/academicService';
 import { createVentureActivity } from '@/services/ventures/ventureActivityService';
-import { createStudentVenture } from '@/services/ventures/studentVentureService';
+import {
+  assignReviewers,
+  createStudentVenture,
+  updateStudentVenture,
+} from '@/services/ventures/studentVentureService';
 import { VENTURE_STATUSES } from '@/lib/constants/status';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/errors';
 import type { ImportSpec } from '@/lib/import/types';
@@ -384,17 +395,28 @@ const optionalEmail = z
  * first two would send an administrator back to a spreadsheet to fix a value
  * that was never ambiguous.
  */
+/**
+ * Status as written in the file, or `undefined` when the cell is blank.
+ *
+ * Blank deliberately does *not* mean ACTIVE here. A file used to edit existing
+ * ventures usually carries only the columns being changed, and defaulting the
+ * empty cell would quietly reinstate every venture that had been put on hold.
+ * The default belongs at creation, which is the only moment there is nothing
+ * to preserve.
+ */
 const ventureStatusField = z
   .string()
   .trim()
   .optional()
   .transform((value) =>
-    value === undefined || value === '' ? 'ACTIVE' : value.toUpperCase().replace(/[\s-]+/g, '_'),
+    value === undefined || value === '' ? undefined : value.toUpperCase().replace(/[\s-]+/g, '_'),
   )
   .pipe(
-    z.enum(VENTURE_STATUSES, {
-      message: 'Use Active, On hold, Completed or Discontinued',
-    }),
+    z
+      .enum(VENTURE_STATUSES, {
+        message: 'Use Active, On hold, Completed or Discontinued',
+      })
+      .optional(),
   );
 
 const ventureRow = z
@@ -482,7 +504,7 @@ export const ventureImport: ImportSpec<VentureImportRow> = {
   key: 'ventures',
   title: 'Import ventures',
   description:
-    'Creates one venture per student, with its activity records. Naming a faculty member and a mentor here is what grants them review rights.',
+    'One venture per student. A student who already has one is updated rather than rejected, and only the columns you fill in change — a blank cell keeps the current value. Naming a faculty member and a mentor here is what grants them review rights.',
   roles: ['ADMIN'],
   columns: [
     {
@@ -521,21 +543,21 @@ export const ventureImport: ImportSpec<VentureImportRow> = {
       label: 'Faculty Email',
       required: false,
       example: 'meera@programme.edu',
-      hint: 'Grants review rights — leave blank to assign later',
+      hint: 'Grants review rights — blank leaves the current faculty member in place',
     },
     {
       field: 'mentorEmail',
       label: 'Mentor Email',
       required: false,
       example: 'rahul@industry.com',
-      hint: 'Grants review rights — leave blank to assign later',
+      hint: 'Grants review rights — blank leaves the current mentor in place',
     },
     {
       field: 'status',
       label: 'Status',
       required: false,
       example: 'Active',
-      hint: 'Active, On hold, Completed or Discontinued — defaults to Active',
+      hint: 'Active, On hold, Completed or Discontinued — blank keeps the current status, and a new venture starts Active',
     },
   ],
   schema: ventureRow,
@@ -545,6 +567,31 @@ export const ventureImport: ImportSpec<VentureImportRow> = {
     ...duplicateBy<VentureImportRow>((row) => row.rollNumber ?? '', 'roll number')(rows),
     ...duplicateBy<VentureImportRow>((row) => row.studentEmail ?? '', 'student email')(rows),
   ],
+  /**
+   * Says when a row would overwrite rather than add.
+   *
+   * Resolution failures are swallowed: this runs during the dry run, where the
+   * schema pass has already reported what it can, and a student who cannot be
+   * found is the commit pass's news to break.
+   */
+  preview: async (row) => {
+    await connectToDatabase();
+
+    const studentId = await resolveStudent(row).catch(() => null);
+    if (!studentId) return null;
+
+    const existing = await StudentVenture.findOne({ studentId })
+      .select('ventureName')
+      .lean()
+      .exec();
+
+    if (!existing) return { action: 'created' };
+
+    return {
+      action: 'updated',
+      note: `Will update the existing venture "${existing.ventureName}"`,
+    };
+  },
   commit: async (row) => {
     await connectToDatabase();
 
@@ -555,10 +602,40 @@ export const ventureImport: ImportSpec<VentureImportRow> = {
       row.mentorEmail ? resolveReviewer(row.mentorEmail, 'MENTOR') : undefined,
     ]);
 
-    // The same service call the form makes, so an imported venture is checked
-    // for uniqueness and gets its activity records bootstrapped identically.
-    await createStudentVenture({
-      studentId,
+    const existing = await StudentVenture.findOne({ studentId })
+      .select('_id facultyId mentorId')
+      .lean()
+      .exec();
+
+    if (!existing) {
+      // The same service call the form makes, so an imported venture is
+      // checked for uniqueness and gets its activity records bootstrapped
+      // identically. ACTIVE is applied here rather than in the schema: this is
+      // the only point at which there is no existing status to preserve.
+      await createStudentVenture({
+        studentId,
+        ventureName: row.ventureName,
+        ventureTitle: row.ventureTitle,
+        industry: row.industry,
+        targetMarket: row.targetMarket,
+        problemStatement: row.problemStatement,
+        solution: row.solution,
+        fundingStatus: row.fundingStatus,
+        facultyId,
+        mentorId,
+        status: row.status ?? 'ACTIVE',
+      });
+
+      return 'created';
+    }
+
+    const ventureId = existing._id.toString();
+
+    // Only the columns the file actually filled in are written. A blank cell
+    // means "leave this as it is", not "erase it": an edit file usually
+    // carries the two columns being corrected and nothing else, and reading
+    // its blanks as deletions would strip a venture back to its name.
+    await updateStudentVenture(ventureId, {
       ventureName: row.ventureName,
       ventureTitle: row.ventureTitle,
       industry: row.industry,
@@ -566,10 +643,20 @@ export const ventureImport: ImportSpec<VentureImportRow> = {
       problemStatement: row.problemStatement,
       solution: row.solution,
       fundingStatus: row.fundingStatus,
-      facultyId,
-      mentorId,
       status: row.status,
     });
+
+    // Reviewers go through their own service call because assigning one has to
+    // reach every not-yet-reviewed activity as well. Untouched unless the file
+    // named somebody, and the side not named keeps whoever it already had.
+    if (facultyId || mentorId) {
+      await assignReviewers(ventureId, {
+        facultyId: facultyId ?? existing.facultyId?.toString(),
+        mentorId: mentorId ?? existing.mentorId?.toString(),
+      });
+    }
+
+    return 'updated';
   },
 };
 

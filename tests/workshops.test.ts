@@ -55,8 +55,9 @@ describe('mode decides which location field is required', () => {
   });
 
   it('accepts an online workshop with a meeting link and no venue', () => {
-    expect(parse({ mode: 'ONLINE', venue: '', meetingLink: 'https://meet.example.com/abc' }).success)
-      .toBe(true);
+    expect(
+      parse({ mode: 'ONLINE', venue: '', meetingLink: 'https://meet.example.com/abc' }).success,
+    ).toBe(true);
   });
 
   it('requires both a venue and a link for a hybrid workshop', () => {
@@ -117,16 +118,19 @@ describe('LinkedIn profiles', () => {
 });
 
 describe('other links', () => {
-  it('requires http(s) for the meeting and registration links', () => {
-    expect(errorPaths(parse({ mode: 'ONLINE', venue: '', meetingLink: 'meet.example.com' })))
-      .toContain('meetingLink');
-    expect(errorPaths(parse({ registrationLink: 'javascript:alert(1)' }))).toContain(
-      'registrationLink',
-    );
+  it('requires http(s) for the meeting link', () => {
+    expect(
+      errorPaths(parse({ mode: 'ONLINE', venue: '', meetingLink: 'meet.example.com' })),
+    ).toContain('meetingLink');
   });
 
-  it('accepts an absent registration link', () => {
-    expect(parse({ registrationLink: '' }).success).toBe(true);
+  it('does not accept a registration link at all', () => {
+    // Workshops are announced, not signed up for. A stray column in a seed or
+    // an old payload should be ignored rather than quietly stored.
+    const parsed = parse({ registrationLink: 'https://forms.example.com/x' });
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).not.toHaveProperty('registrationLink');
   });
 });
 
@@ -179,8 +183,12 @@ describe('workshop type', () => {
 
   it('is independent of mode — any type can run in any mode', () => {
     expect(
-      parse({ workshopType: 'INDUSTRIAL_VISIT', mode: 'ONLINE', venue: '', meetingLink: 'https://x.test/a' })
-        .success,
+      parse({
+        workshopType: 'INDUSTRIAL_VISIT',
+        mode: 'ONLINE',
+        venue: '',
+        meetingLink: 'https://x.test/a',
+      }).success,
     ).toBe(true);
     expect(parse({ workshopType: 'FOUNDER_TALK', mode: 'OFFLINE' }).success).toBe(true);
   });

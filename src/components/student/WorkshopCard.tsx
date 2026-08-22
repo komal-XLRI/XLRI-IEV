@@ -9,7 +9,6 @@ import {
   ExternalLink,
   MapPin,
   Mic,
-  Ticket,
   UserRound,
   Users,
   Video,
@@ -186,21 +185,6 @@ function WorkshopBody({ workshop }: { workshop: WorkshopRecord }) {
           </Detail>
         ) : null}
       </dl>
-
-      {workshop.registrationLink && !cancelled ? (
-        <div className="mt-4">
-          <a
-            href={workshop.registrationLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors"
-          >
-            <Ticket className="size-4" aria-hidden="true" />
-            Register for this session
-            <span className="sr-only"> (opens in a new tab)</span>
-          </a>
-        </div>
-      ) : null}
 
       {/* The one thing that is not on the record: a hybrid session that has a
           link but no venue, or the reverse, would leave a student guessing. */}

@@ -191,7 +191,6 @@ export async function updateWorkshop(workshopId: string, patch: Record<string, u
     speakerDesignation: existing.speakerDesignation,
     speakerOrganisation: existing.speakerOrganisation,
     speakerLinkedIn: existing.speakerLinkedIn,
-    registrationLink: existing.registrationLink,
     maxParticipants: existing.maxParticipants,
     status: existing.status,
     ...patch,

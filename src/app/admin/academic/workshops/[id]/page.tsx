@@ -7,7 +7,6 @@ import {
   Clock,
   ExternalLink,
   Hourglass,
-  Link2,
   Mail,
   MapPin,
   Mic,
@@ -104,7 +103,6 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
                 speakerDesignation: workshop.speakerDesignation ?? '',
                 speakerOrganisation: workshop.speakerOrganisation ?? '',
                 speakerLinkedIn: workshop.speakerLinkedIn ?? '',
-                registrationLink: workshop.registrationLink ?? '',
                 maxParticipants: workshop.maxParticipants ? String(workshop.maxParticipants) : '',
                 status: workshop.status,
               }}
@@ -179,7 +177,7 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
         </div>
 
         <Card className="h-fit">
-          <CardHeader title="Attendance and registration" icon={Users} />
+          <CardHeader title="Attendance" icon={Users} />
           <CardBody>
             <dl className="space-y-4">
               <Detail icon={Users} label="Maximum participants">
@@ -202,16 +200,6 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
                       ? 'Not sent yet'
                       : 'Publish the workshop to email students'}
                   </span>
-                )}
-              </Detail>
-
-              <Detail icon={Link2} label="Registration">
-                {workshop.registrationLink ? (
-                  <ExternalAnchor href={workshop.registrationLink}>
-                    Open the registration form
-                  </ExternalAnchor>
-                ) : (
-                  <span className="text-muted-foreground">No registration link</span>
                 )}
               </Detail>
             </dl>

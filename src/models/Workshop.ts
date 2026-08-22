@@ -51,7 +51,6 @@ export interface IWorkshop {
   speakerOrganisation?: string;
   speakerLinkedIn?: string;
 
-  registrationLink?: string;
   maxParticipants?: number | null;
 
   status: WorkshopStatus;
@@ -102,7 +101,6 @@ const workshopSchema = new Schema<IWorkshop>(
     speakerOrganisation: { type: String, trim: true, maxlength: 160 },
     speakerLinkedIn: { type: String, trim: true, maxlength: 500 },
 
-    registrationLink: { type: String, trim: true, maxlength: 500 },
     maxParticipants: { type: Number, min: 1, max: 100_000, default: null },
 
     status: { type: String, required: true, enum: WORKSHOP_STATUSES, default: 'DRAFT' },

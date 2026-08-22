@@ -1,6 +1,6 @@
 import 'server-only';
 import { ZodError } from 'zod';
-import { parseCsv } from './parseCsv';
+import { normaliseHeader, parseCsv, parseGrid } from './parseCsv';
 import type { ImportOutcome, ImportRowResult, ImportSpec } from './types';
 
 export const MAX_IMPORT_ROWS = 2_000;
@@ -16,11 +16,21 @@ export const MAX_IMPORT_ROWS = 2_000;
  */
 export async function runImport<Parsed>(
   spec: ImportSpec<Parsed>,
-  csv: string,
+  /**
+   * CSV text, or an already-split grid from a spreadsheet.
+   *
+   * Both arrive at the same validation and commit passes on purpose: an
+   * imported row must mean the same thing whichever file it came out of.
+   */
+  source: string | string[][],
   options: { dryRun: boolean },
 ): Promise<ImportOutcome> {
-  const fields = spec.columns.map((column) => column.field);
-  const { headers, rows, lineNumbers } = parseCsv(csv, fields);
+  // Labels ride along with the field names: the heading a person writes is the
+  // label ("Funding"), not the field ("fundingStatus"), and matching only the
+  // latter dropped those columns without a word.
+  const fields = spec.columns.map((column) => ({ field: column.field, label: column.label }));
+  const { headers, rows, lineNumbers } =
+    typeof source === 'string' ? parseCsv(source, fields) : parseGrid(source, fields);
 
   const fileErrors: string[] = [];
 
@@ -34,12 +44,16 @@ export async function runImport<Parsed>(
     );
   }
 
-  // A missing required column is a file-level problem, not a per-row one.
-  const present = new Set(headers.map((header) => header.trim().toLowerCase()));
+  // A missing required column is a file-level problem, not a per-row one. The
+  // header is compared the same forgiving way the parser matched it, so a file
+  // headed "roll_number" is not reported as missing "Roll Number".
+  const present = new Set(headers.map(normaliseHeader));
   for (const column of spec.columns) {
     if (!column.required) continue;
     const matched = rows.some((row) => row[column.field] !== '');
-    if (!matched && !present.has(column.label.toLowerCase())) {
+    const named =
+      present.has(normaliseHeader(column.field)) || present.has(normaliseHeader(column.label));
+    if (!matched && !named) {
       fileErrors.push(`Required column "${column.label}" is missing or empty for every row.`);
     }
   }
@@ -52,6 +66,7 @@ export async function runImport<Parsed>(
       validRows: 0,
       invalidRows: rows.length,
       createdRows: 0,
+      updatedRows: 0,
       failedRows: 0,
       results: [],
       fileErrors,
@@ -68,13 +83,14 @@ export async function runImport<Parsed>(
 
     if (outcome.success) {
       parsed.push({ index, value: outcome.data });
-      results.push({ line, status: 'ok', values: row, errors: [] });
+      results.push({ line, status: 'ok', values: row, errors: [], notes: [] });
     } else {
       results.push({
         line,
         status: 'error',
         values: row,
         errors: formatIssues(outcome.error),
+        notes: [],
       });
     }
   });
@@ -96,6 +112,28 @@ export async function runImport<Parsed>(
   const invalidRows = results.filter((result) => result.status === 'error').length;
 
   if (options.dryRun) {
+    // Ask the spec what each row would do, so a row that is about to replace
+    // an existing record says so while there is still time to stop.
+    let plannedUpdates = 0;
+
+    if (spec.preview) {
+      for (const entry of validEntries) {
+        const result = results[entry.index];
+        if (!result) continue;
+
+        try {
+          const plan = await spec.preview(entry.value);
+          if (plan?.action !== 'updated') continue;
+
+          plannedUpdates += 1;
+          result.notes.push(plan.note ?? 'Will replace an existing record');
+        } catch {
+          // A preview is a courtesy: if the lookup fails, the commit pass will
+          // report the real problem against the row rather than the file.
+        }
+      }
+    }
+
     return {
       datasetKey: spec.key,
       dryRun: true,
@@ -103,6 +141,7 @@ export async function runImport<Parsed>(
       validRows: validEntries.length,
       invalidRows,
       createdRows: 0,
+      updatedRows: plannedUpdates,
       failedRows: 0,
       results,
       fileErrors: [],
@@ -111,6 +150,7 @@ export async function runImport<Parsed>(
 
   // ---- Phase 2: commit the valid rows ----------------------------------
   let createdRows = 0;
+  let updatedRows = 0;
   let failedRows = 0;
 
   for (const entry of validEntries) {
@@ -118,9 +158,17 @@ export async function runImport<Parsed>(
     if (!result) continue;
 
     try {
-      await spec.commit(entry.value);
-      result.status = 'created';
-      createdRows += 1;
+      // A spec that only ever creates returns nothing, so undefined reads as
+      // 'created' rather than forcing five create-only specs to say so.
+      const action = (await spec.commit(entry.value)) ?? 'created';
+
+      if (action === 'updated') {
+        result.status = 'updated';
+        updatedRows += 1;
+      } else {
+        result.status = 'created';
+        createdRows += 1;
+      }
     } catch (error) {
       result.status = 'failed';
       result.errors.push(error instanceof Error ? error.message : 'Unknown error');
@@ -135,6 +183,7 @@ export async function runImport<Parsed>(
     validRows: validEntries.length,
     invalidRows,
     createdRows,
+    updatedRows,
     failedRows,
     results,
     fileErrors: [],
@@ -157,4 +206,48 @@ export function buildTemplate(spec: ImportSpec<unknown>): string {
   const example = spec.columns.map((column) => escape(column.example)).join(',');
 
   return `﻿${header}\r\n${example}\r\n`;
+}
+
+/**
+ * The same template as a workbook.
+ *
+ * Most people will fill this in rather than the CSV, so it does the things a
+ * blank grid cannot: required columns are marked, the hints ride along as cell
+ * comments, and every column is text-formatted — which is what stops Excel
+ * turning a roll number into 1.02e+11 or a code like "V01" into a date.
+ */
+export async function buildTemplateWorkbook(spec: ImportSpec<unknown>): Promise<Buffer> {
+  const ExcelJS = (await import('exceljs')).default;
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'IEV Activity Tracker';
+
+  const sheet = workbook.addWorksheet(spec.title.slice(0, 31));
+
+  sheet.columns = spec.columns.map((column) => ({
+    header: column.required ? `${column.label} *` : column.label,
+    key: column.field,
+    width: Math.max(14, Math.min(40, column.label.length + 8)),
+    style: { numFmt: '@' },
+  }));
+
+  const header = sheet.getRow(1);
+  header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+  header.alignment = { vertical: 'middle' };
+  header.height = 22;
+
+  spec.columns.forEach((column, index) => {
+    if (!column.hint) return;
+    header.getCell(index + 1).note = column.hint;
+  });
+
+  const example = sheet.addRow(
+    Object.fromEntries(spec.columns.map((column) => [column.field, column.example])),
+  );
+  example.font = { italic: true, color: { argb: 'FF64748B' } };
+
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }

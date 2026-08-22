@@ -284,7 +284,6 @@ export interface WorkshopEmailDetails {
   speakerName: string;
   speakerDesignation?: string;
   speakerOrganisation?: string;
-  registrationLink?: string;
 }
 
 /** "Head of Design · Acme" from the parts that are actually present. */
@@ -330,7 +329,6 @@ export function workshopAnnouncementEmail(params: {
     workshop.speakerOrganisation,
   );
   const meetingLink = safeUrl(workshop.meetingLink);
-  const registrationLink = safeUrl(workshop.registrationLink);
   const when = `${workshop.dateLabel}, ${workshop.startTime}–${workshop.endTime}`;
 
   const text = [
@@ -354,7 +352,6 @@ export function workshopAnnouncementEmail(params: {
     ...(meetingLink ? [`Join link : ${meetingLink}`] : []),
     `Host      : ${host}`,
     `Speaker   : ${speaker}`,
-    ...(registrationLink ? ['', `Register here: ${registrationLink}`] : []),
     '',
     'Please make a note of the date and time.',
     '',
@@ -417,22 +414,6 @@ ${
                 </table>
               </td>
             </tr>
-${
-  registrationLink
-    ? `
-            <tr>
-              <td class="sm-px" align="center" style="padding:24px 40px 0;">
-                <!-- Padded anchor rather than a styled button element: Outlook
-                     renders a <button> as nothing at all. -->
-                <a href="${escapeHtml(registrationLink)}"
-                   style="display:inline-block;padding:12px 26px;background:${BRAND.navy};color:#ffffff;font-size:15px;font-weight:600;line-height:20px;text-decoration:none;border-radius:8px;">
-                  Register for this session
-                </a>
-              </td>
-            </tr>
-`
-    : ''
-}
             <tr>
               <td class="sm-px" style="padding:28px 40px 32px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"

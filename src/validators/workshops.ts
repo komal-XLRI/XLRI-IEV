@@ -94,7 +94,6 @@ const workshopFields = z.object({
   speakerOrganisation: optionalText(160),
   speakerLinkedIn: linkedInUrl,
 
-  registrationLink: optionalHttpUrl('Enter a valid registration link (https://…)'),
   maxParticipants: z.coerce.number().int().min(1).max(100_000).nullish(),
 
   status: z.enum(WORKSHOP_STATUSES).default('DRAFT'),
