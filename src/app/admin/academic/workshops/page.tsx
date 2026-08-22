@@ -49,7 +49,6 @@ export default async function AdminWorkshopsPage() {
     speakerDesignation: workshop.speakerDesignation ?? '',
     speakerOrganisation: workshop.speakerOrganisation ?? '',
     speakerLinkedIn: workshop.speakerLinkedIn ?? '',
-    registrationLink: workshop.registrationLink ?? '',
     maxParticipants: workshop.maxParticipants ? String(workshop.maxParticipants) : '',
     status: workshop.status,
     isEmailSent: workshop.isEmailSent,

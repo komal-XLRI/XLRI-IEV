@@ -114,7 +114,6 @@ export async function sendWorkshopAnnouncement(
     speakerName: workshop.speakerName,
     speakerDesignation: workshop.speakerDesignation,
     speakerOrganisation: workshop.speakerOrganisation,
-    registrationLink: workshop.registrationLink,
   };
 
   const deliver = options.deliver ?? sendEmail;

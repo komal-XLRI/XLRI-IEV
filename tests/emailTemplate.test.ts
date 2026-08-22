@@ -211,7 +211,6 @@ describe('workshop announcement', () => {
       modeLabel: 'Online',
       venue: undefined,
       meetingLink: 'https://meet.example.com/abc',
-      registrationLink: 'https://forms.example.com/register',
     },
   });
 
@@ -259,10 +258,15 @@ describe('workshop announcement', () => {
     expect(online.text).not.toContain('Venue');
   });
 
-  it('offers a registration button only when there is somewhere to register', () => {
-    expect(online.html).toContain('Register for this session');
-    expect(online.text).toContain('Register here: https://forms.example.com/register');
-    expect(offline.html).not.toContain('Register for this session');
+  it('never asks the student to register', () => {
+    // Workshops are announced to the whole cohort, so the mail carries the
+    // details and nothing to click. A registration link may still be recorded
+    // against the workshop — it belongs on the workshop card in the app, not
+    // in an announcement sent to everyone who is already invited.
+    for (const mail of [online, offline]) {
+      expect(mail.html).not.toContain('Register');
+      expect(mail.text).not.toContain('Register');
+    }
   });
 
   it('omits an optional description rather than leaving an empty paragraph', () => {
@@ -303,13 +307,11 @@ describe('workshop announcement', () => {
       workshop: {
         ...OFFLINE,
         meetingLink: 'javascript:alert(1)',
-        registrationLink: 'javascript:alert(1)',
       },
     });
 
     expect(hostile.html).not.toMatch(/href="javascript:/i);
     expect(hostile.text).not.toContain('javascript:');
-    expect(hostile.html).not.toContain('Register for this session');
   });
 
   it('is built from the same institutional shell as the OTP email', () => {

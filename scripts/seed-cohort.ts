@@ -259,7 +259,6 @@ const WORKSHOPS = [
     speakerDesignation: 'VP Operations',
     speakerOrganisation: 'Gridline Logistics',
     speakerLinkedIn: 'https://www.linkedin.com/in/imran-sheikh-demo',
-    registrationLink: 'https://forms.office.com/r/demo-unit-economics',
     maxParticipants: 100,
     status: 'PUBLISHED' as const,
   },

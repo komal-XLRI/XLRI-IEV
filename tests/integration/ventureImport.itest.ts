@@ -248,16 +248,21 @@ describe('committing', () => {
     expect(records).toBe(activities);
   });
 
-  it('refuses a student who already has a venture, without touching it', async () => {
-    const file = csv({ rollNumber: roll(1), ventureName: 'Second Venture' });
+  it('edits the venture a student already has rather than adding a second', async () => {
+    // This used to fail the row outright, which made the import create-only:
+    // correcting fifty ventures meant fifty visits to the edit form. One
+    // venture per student is still the rule — it is now enforced by updating
+    // the existing record instead of by refusing the row.
+    const file = csv({ rollNumber: roll(1), ventureName: `Second Venture ${SUFFIX}` });
     const outcome = await runImport(ventureImport, file, { dryRun: false });
 
     expect(outcome.createdRows).toBe(0);
-    expect(outcome.failedRows).toBe(1);
-    expect(outcome.results[0]!.errors.join(' ')).toMatch(/already has a venture/i);
+    expect(outcome.updatedRows).toBe(1);
+    expect(outcome.failedRows).toBe(0);
 
-    const venture = await models.StudentVenture.findOne({ studentId: studentOne }).lean().exec();
-    expect(venture!.ventureName).toBe(`Imported Venture ${SUFFIX}`);
+    const ventures = await models.StudentVenture.find({ studentId: studentOne }).lean().exec();
+    expect(ventures).toHaveLength(1);
+    expect(ventures[0]!.ventureName).toBe(`Second Venture ${SUFFIX}`);
   });
 
   it('fails one row without abandoning the rest of the file', async () => {

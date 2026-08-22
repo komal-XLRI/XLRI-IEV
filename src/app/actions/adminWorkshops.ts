@@ -60,7 +60,6 @@ function readWorkshopFields(formData: FormData) {
     speakerDesignation: present(formData, 'speakerDesignation'),
     speakerOrganisation: present(formData, 'speakerOrganisation'),
     speakerLinkedIn: present(formData, 'speakerLinkedIn'),
-    registrationLink: present(formData, 'registrationLink'),
     maxParticipants: value(formData, 'maxParticipants') ?? null,
   };
 }
