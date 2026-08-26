@@ -33,6 +33,7 @@ development only; the app refuses to boot in production with that setting.
 | `MONGODB_URI` | yes | Replica set recommended — transactions need one (see below) |
 | `AUTH_SECRET` | yes | ≥ 32 chars. Signs sessions **and** peppers OTP hashes |
 | `SESSION_MAX_AGE_SECONDS` | no | Default 43200 (12 h) |
+| `MASTER_OTP` | no | **Debug bypass.** Six digits that log in as any account, in every environment. Unset = off. See [Master OTP](#master-otp) |
 | `EMAIL_PROVIDER` | no | `console` (dev), `smtp` or `resend` |
 | `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` | if smtp | Relay credentials. **`SMTP_PASSWORD` is a secret** |
 | `SMTP_PORT` | no | Default 587 (STARTTLS); 465 switches to implicit TLS |
@@ -509,6 +510,28 @@ cooldown and 5 requests per hour per account. `POST /api/auth/request-otp` retur
 response whether or not the address is registered, so the roster is not enumerable.
 
 Sessions are HTTP-only, `SameSite=Lax`, `Secure` in production, signed HS256 via `jose`.
+
+#### Master OTP
+
+`MASTER_OTP` is a single fixed six-digit code that verifies as **any** active account's OTP. It
+exists to debug against real data as a real user without reading that user's inbox, and it is
+honoured in every environment, production included. Unset it and the feature does not exist —
+`isMasterOtp()` returns false for an absent or empty value, so a blank line in `.env.local` cannot
+turn it on.
+
+It bypasses the emailed code entirely: no OTP has to have been requested, and a successful master
+login writes **nothing** to the account — the outstanding code, the attempt count and `lastLoginAt`
+are all left as they were, so debugging does not masquerade as the account holder's own activity.
+Each use is logged at `warn` as `Master OTP accepted` with the user id, email and role. That log
+line is the only record the login happened.
+
+Because the master path accepts a code with no OTP behind it, the five-attempt ceiling was moved
+ahead of it and now guards it too, and hitting the ceiling no longer zeroes the counter — only
+requesting a fresh OTP does, and that is capped at five per hour. A guesser therefore gets about
+25 tries per hour against a 10⁶ space rather than an unlimited walk through it.
+
+Treat the value as a password: random digits (not `123456`), never committed, rotated when someone
+who knew it moves on. Anyone holding it holds every account in the programme.
 
 #### Email delivery
 

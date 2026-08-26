@@ -4,6 +4,7 @@ import {
   OTP_TTL_SECONDS,
   generateOtp,
   hashOtp,
+  isMasterOtp,
   otpExpiryFrom,
   safeEqual,
   verifyOtp,
@@ -91,6 +92,27 @@ describe('constant-time compare', () => {
 
   it('rejects strings of different lengths', () => {
     expect(safeEqual('abc', 'abcdef')).toBe(false);
+  });
+});
+
+describe('master OTP', () => {
+  it('matches the configured code', () => {
+    expect(isMasterOtp('314159', '314159')).toBe(true);
+  });
+
+  it('rejects any other code', () => {
+    expect(isMasterOtp('314158', '314159')).toBe(false);
+  });
+
+  // The whole feature is off unless the variable is set, so an unset value
+  // must never match — including against the empty string a blank line in
+  // .env.local would produce.
+  it('never matches when no master is configured', () => {
+    expect(isMasterOtp('314159', undefined)).toBe(false);
+    expect(isMasterOtp('314159', null)).toBe(false);
+    expect(isMasterOtp('314159', '')).toBe(false);
+    expect(isMasterOtp('', '')).toBe(false);
+    expect(isMasterOtp('', undefined)).toBe(false);
   });
 });
 
