@@ -73,6 +73,22 @@ export async function verifyOtp(candidate: string, storedHash: string): Promise<
   return safeEqual(candidateHash, storedHash);
 }
 
+/**
+ * Whether `candidate` is the configured master OTP.
+ *
+ * The master code is taken as an argument rather than read from the
+ * environment, which keeps this function pure, testable, and safe to import
+ * from anywhere — only the server-side caller can supply the real value.
+ *
+ * An unset master is the case that matters: returning false for it is what
+ * stops an empty or missing `MASTER_OTP` from turning every login attempt
+ * into a match.
+ */
+export function isMasterOtp(candidate: string, master: string | undefined | null): boolean {
+  if (!master) return false;
+  return safeEqual(candidate, master);
+}
+
 export function otpExpiryFrom(now: Date = new Date()): Date {
   return new Date(now.getTime() + OTP_TTL_SECONDS * 1000);
 }

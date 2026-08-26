@@ -7,6 +7,7 @@ import { z } from 'zod';
  * these values (Cloudinary secrets, AUTH_SECRET) must never reach the browser.
  */
 import 'server-only';
+import { OTP_LENGTH } from '@/lib/auth/otp';
 
 const emptyToUndefined = (value: unknown) =>
   typeof value === 'string' && value.trim() === '' ? undefined : value;
@@ -19,6 +20,24 @@ const envSchema = z
 
     AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 characters'),
     SESSION_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(43_200),
+
+    // A fixed code that verifies as *any* active account's OTP, so a developer
+    // can sign in as a user whose inbox they do not have. Set deliberately and
+    // active in every environment including production — unsetting it is the
+    // only thing that turns it off.
+    //
+    // It must be exactly OTP_LENGTH digits or it could never be typed into the
+    // login form, which accepts nothing else.
+    MASTER_OTP: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(
+          new RegExp(`^\\d{${OTP_LENGTH}}$`),
+          `MASTER_OTP must be exactly ${OTP_LENGTH} digits`,
+        )
+        .optional(),
+    ),
 
     EMAIL_PROVIDER: z.enum(['console', 'resend', 'smtp']).default('console'),
     RESEND_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),

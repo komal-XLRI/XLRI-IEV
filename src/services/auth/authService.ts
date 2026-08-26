@@ -13,10 +13,12 @@ import {
   OTP_TTL_SECONDS,
   generateOtp,
   hashOtp,
+  isMasterOtp,
   otpExpiryFrom,
   verifyOtp,
 } from '@/lib/auth/otp';
 import { createSessionToken, type SessionUser } from '@/lib/auth/session';
+import { env } from '@/config/env';
 
 /**
  * Same response whether or not the email belongs to a real account. Accounts
@@ -110,6 +112,28 @@ export interface VerifyOtpResult {
   user: SessionUser;
 }
 
+let masterOtpAnnounced = false;
+
+/**
+ * The configured master code, announced once per process.
+ *
+ * `env()` snapshots the environment the first time it is read, so a
+ * `MASTER_OTP` added to an already-running server is not picked up until that
+ * server restarts — and the symptom is indistinguishable from typing the code
+ * wrongly: an ordinary "Invalid or expired code". This line says which side of
+ * that you are on, and says it without putting the code in the log.
+ */
+function masterOtp(): string | undefined {
+  const configured = env().MASTER_OTP;
+
+  if (!masterOtpAnnounced) {
+    masterOtpAnnounced = true;
+    logger.info('Master OTP status', { armed: Boolean(configured) });
+  }
+
+  return configured;
+}
+
 export async function verifyOtpAndCreateSession(
   rawEmail: string,
   otp: string,
@@ -127,27 +151,64 @@ export async function verifyOtpAndCreateSession(
   const invalid = new UnauthorizedError('Invalid or expired code');
 
   if (!user || user.status !== 'ACTIVE') throw invalid;
-  if (!user.otpHash || !user.otpExpiresAt) throw invalid;
 
-  if (user.otpExpiresAt.getTime() <= now.getTime()) {
-    await clearOtp(user._id.toString());
+  const userId = user._id.toString();
+
+  const sessionUser: SessionUser = {
+    userId,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+  };
+
+  // The attempt ceiling is checked before anything is compared, and it is
+  // checked ahead of the emailed code because it now has to cover the master
+  // code as well. The master path below accepts a login with no outstanding
+  // OTP behind it, so this is the only thing standing between an attacker and
+  // an unlimited walk through a six-digit space.
+  if (user.otpAttempts >= OTP_MAX_VERIFY_ATTEMPTS) {
+    // The outstanding code is taken out of play, but the counter is
+    // deliberately left standing. Only *requesting* a new OTP resets it, and
+    // that is itself limited to five per hour — zeroing it here would hand a
+    // guesser a fresh five tries on every single call.
+    await burnOtp(userId);
+    throw new RateLimitError('Too many incorrect attempts. Request a new code.');
+  }
+
+  // The master code: one fixed OTP that signs in as any active account,
+  // whether or not a real code was ever requested — which is the entire point,
+  // since it exists for accounts whose inbox the operator cannot read.
+  if (isMasterOtp(otp, masterOtp())) {
+    // Logged at warn with the account it opened. No email was sent and no OTP
+    // row was consumed, so this line is the only record anywhere that the
+    // login happened.
+    logger.warn('Master OTP accepted', { userId, email: user.email, role: user.role });
+
+    // Nothing on the account is written: not the outstanding code, not the
+    // attempt count, and not `lastLoginAt` — that field reports the account
+    // holder's own activity, and somebody else debugging as them is not that.
+    return { token: await createSessionToken(sessionUser), user: sessionUser };
+  }
+
+  if (!user.otpHash || !user.otpExpiresAt) {
+    // Counted, not waved through. Reaching here means a code was offered for
+    // an account with none outstanding, which is exactly what guessing at the
+    // master code looks like.
+    await recordFailedAttempt(userId);
     throw invalid;
   }
 
-  if (user.otpAttempts >= OTP_MAX_VERIFY_ATTEMPTS) {
-    await clearOtp(user._id.toString());
-    throw new RateLimitError('Too many incorrect attempts. Request a new code.');
+  if (user.otpExpiresAt.getTime() <= now.getTime()) {
+    await burnOtp(userId);
+    await recordFailedAttempt(userId);
+    throw invalid;
   }
 
   const matches = await verifyOtp(otp, user.otpHash);
 
   if (!matches) {
-    user.otpAttempts += 1;
-    await user.save();
-    logger.warn('Failed OTP verification', {
-      userId: user._id.toString(),
-      attempts: user.otpAttempts,
-    });
+    const attempts = await recordFailedAttempt(userId);
+    logger.warn('Failed OTP verification', { userId, attempts });
     throw invalid;
   }
 
@@ -158,21 +219,30 @@ export async function verifyOtpAndCreateSession(
   user.lastLoginAt = now;
   await user.save();
 
-  const sessionUser: SessionUser = {
-    userId: user._id.toString(),
-    email: user.email,
-    name: user.name,
-    role: user.role,
-  };
-
   logger.info('Session created', { userId: sessionUser.userId, role: sessionUser.role });
 
   return { token: await createSessionToken(sessionUser), user: sessionUser };
 }
 
-async function clearOtp(userId: string): Promise<void> {
-  await User.updateOne(
+/** Takes the outstanding code out of play, leaving the attempt count alone. */
+async function burnOtp(userId: string): Promise<void> {
+  await User.updateOne({ _id: userId }, { $set: { otpHash: null, otpExpiresAt: null } }).exec();
+}
+
+/**
+ * Counts one wrong code and returns the new total.
+ *
+ * `$inc` rather than read-modify-write: this is the counter that rate limits
+ * guessing, and concurrent requests are precisely how someone would guess. A
+ * read, an increment and a save would let parallel attempts overwrite each
+ * other and settle on a total far below the number actually tried.
+ */
+async function recordFailedAttempt(userId: string): Promise<number> {
+  const updated = await User.findOneAndUpdate(
     { _id: userId },
-    { $set: { otpHash: null, otpExpiresAt: null, otpAttempts: 0 } },
+    { $inc: { otpAttempts: 1 } },
+    { returnDocument: 'after', projection: '+otpAttempts' },
   ).exec();
+
+  return updated?.otpAttempts ?? 0;
 }
