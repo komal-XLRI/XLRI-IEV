@@ -557,6 +557,14 @@ export function MarkWorkshopAttendanceDialog({
  *
  * `onClick` rather than `onChange`: clicking the option that is already
  * selected fires no change event, and clearing a mark is exactly that click.
+ *
+ * The label must stay positioned. The real radio is visually hidden with
+ * `sr-only`, which is `position: absolute`, so without a positioned ancestor
+ * its containing block becomes the `<dialog>` — and a row far down the roll
+ * resolves to a static position hundreds of pixels below the panel. Clicking
+ * it focuses it, the browser scrolls it into view, and the only box that can
+ * scroll is the dialog's own `overflow-hidden` one, which has no scrollbar to
+ * scroll back: the register goes blank and stays blank.
  */
 function Choice({
   checked,
@@ -575,7 +583,7 @@ function Choice({
     <label
       title={checked ? 'Click again to clear this mark' : `Mark ${label.toLowerCase()}`}
       className={cn(
-        'rounded-control inline-flex cursor-pointer items-center gap-1.5 border px-2.5 py-1 text-[12.5px] font-medium transition-colors',
+        'rounded-control relative inline-flex cursor-pointer items-center gap-1.5 border px-2.5 py-1 text-[12.5px] font-medium transition-colors',
         checked
           ? tone === 'present'
             ? 'border-success-border bg-success text-success-foreground'
