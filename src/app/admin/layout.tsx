@@ -43,6 +43,12 @@ const NAV: NavItem[] = [
   { href: '/admin/academic/subjects', label: 'Subjects', icon: 'subjects', group: 'Academic' },
   { href: '/admin/academic/sessions', label: 'Classes', icon: 'sessions', group: 'Academic' },
   { href: '/admin/academic/workshops', label: 'Workshops', icon: 'workshops', group: 'Academic' },
+  {
+    href: '/admin/academic/recordings',
+    label: 'Recordings',
+    icon: 'recordings',
+    group: 'Academic',
+  },
 
   { href: '/admin/reviews', label: 'Reviews', icon: 'reviews', group: 'Reviews & reporting' },
   { href: '/admin/reports', label: 'Reports', icon: 'reports', group: 'Reviews & reporting' },

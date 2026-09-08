@@ -22,6 +22,7 @@ import {
   UserCheck2,
   UserCircle,
   Users,
+  Video,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -48,6 +49,7 @@ export const NAV_ICONS = {
   subjects: Library,
   workshops: Presentation,
   sessions: CalendarDays,
+  recordings: Video,
   reviews: ClipboardCheck,
   reports: FileBarChart,
   profile: UserCircle,
