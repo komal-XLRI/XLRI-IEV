@@ -30,6 +30,9 @@ export {
 export { SupportActivity, type ISupportActivity } from './SupportActivity';
 export { StudentSupportActivity, type IStudentSupportActivity } from './StudentSupportActivity';
 
+export { Recording, type IRecording } from './Recording';
+export { RecordingFolder, RECORDING_FOLDER_KEY, type IRecordingFolder } from './RecordingFolder';
+
 export { Workshop, type IWorkshop } from './Workshop';
 export { WorkshopAttendance, type IWorkshopAttendance } from './WorkshopAttendance';
 

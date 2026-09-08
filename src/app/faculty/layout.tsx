@@ -16,6 +16,7 @@ const NAV: NavItem[] = [
     group: 'Venture supervision',
   },
   { href: '/faculty/subjects', label: 'My subjects', icon: 'subjects', group: 'Academic' },
+  { href: '/faculty/recordings', label: 'Recordings', icon: 'recordings', group: 'Academic' },
 ];
 
 export default async function FacultyLayout({ children }: { children: ReactNode }) {

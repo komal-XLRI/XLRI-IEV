@@ -32,6 +32,7 @@ const LABELS: Record<string, string> = {
   subjects: 'Subjects',
   sessions: 'Classes',
   workshops: 'Workshops',
+  recordings: 'Recordings',
   reviews: 'Reviews',
   reports: 'Reports',
   submissions: 'Submissions',
