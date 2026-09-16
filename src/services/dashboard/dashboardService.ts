@@ -187,6 +187,10 @@ export async function getHeaderAlerts(user: {
 
 export interface PendingReviewAttempt {
   recordId: string;
+  /** The attempt itself, so an administrator can act on the row. Null if the
+   * record is under review with no current submission, which is a data fault
+   * rather than a state the workflow produces. */
+  submissionId: string | null;
   studentName: string;
   ventureName: string;
   activityCode: string;
@@ -195,6 +199,9 @@ export interface PendingReviewAttempt {
   maxAttempts: number;
   facultyReviewStatus: ReviewStatus;
   mentorReviewStatus: ReviewStatus;
+  /** Who a verdict would be attributed to. Null when nobody is assigned. */
+  facultyName: string | null;
+  mentorName: string | null;
   /** When the record last changed — i.e. when it entered review. The
    * submission timestamp itself lives on VentureSubmission. */
   awaitingSince: string;
@@ -216,14 +223,23 @@ export async function getPendingReviewAttempts(limit = 25): Promise<PendingRevie
   // `studentId` of its own, so the name comes from a nested populate.
   const records = await StudentVentureActivity.find({ status: 'UNDER_REVIEW' })
     .select(
-      'studentVentureId ventureActivityId attemptNumber facultyReviewStatus mentorReviewStatus updatedAt',
+      'studentVentureId ventureActivityId currentSubmissionId attemptNumber facultyReviewStatus mentorReviewStatus updatedAt',
     )
     .populate<{
-      studentVentureId: { ventureName: string; studentId: { name: string } | null } | null;
+      studentVentureId: {
+        ventureName: string;
+        studentId: { name: string } | null;
+        facultyId: { name: string } | null;
+        mentorId: { name: string } | null;
+      } | null;
     }>({
       path: 'studentVentureId',
-      select: 'ventureName studentId',
-      populate: { path: 'studentId', select: 'name' },
+      select: 'ventureName studentId facultyId mentorId',
+      populate: [
+        { path: 'studentId', select: 'name' },
+        { path: 'facultyId', select: 'name' },
+        { path: 'mentorId', select: 'name' },
+      ],
     })
     .populate<{
       ventureActivityId: { activityCode: string; name: string; maxAttempts: number } | null;
@@ -235,6 +251,7 @@ export async function getPendingReviewAttempts(limit = 25): Promise<PendingRevie
 
   return records.map((record) => ({
     recordId: record._id.toString(),
+    submissionId: record.currentSubmissionId?.toString() ?? null,
     studentName: record.studentVentureId?.studentId?.name ?? 'Unknown student',
     ventureName: record.studentVentureId?.ventureName ?? '—',
     activityCode: record.ventureActivityId?.activityCode ?? '—',
@@ -243,6 +260,8 @@ export async function getPendingReviewAttempts(limit = 25): Promise<PendingRevie
     maxAttempts: record.ventureActivityId?.maxAttempts ?? 0,
     facultyReviewStatus: record.facultyReviewStatus,
     mentorReviewStatus: record.mentorReviewStatus,
+    facultyName: record.studentVentureId?.facultyId?.name ?? null,
+    mentorName: record.studentVentureId?.mentorId?.name ?? null,
     awaitingSince: record.updatedAt.toISOString(),
   }));
 }

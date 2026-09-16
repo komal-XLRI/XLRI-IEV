@@ -3,10 +3,21 @@ import { ExternalLink, FileImage, FileText, FileVideo, Paperclip } from 'lucide-
 export interface EvidenceItem {
   _id: string;
   fileName: string;
-  fileUrl: string;
   fileType: string;
   fileSize: number;
   uploadedAt: string;
+}
+
+/**
+ * Where a reader opens an evidence file.
+ *
+ * Not the Cloudinary URL on the record: that one is refused for PDFs and can
+ * be read by anyone who has ever seen it. This route authorises the reader and
+ * hands them a link that expires. Everything that links to evidence goes
+ * through here, so there is one answer rather than one per screen.
+ */
+export function evidenceHref(evidenceId: string): string {
+  return `/api/evidence/${evidenceId}`;
 }
 
 export function formatBytes(bytes: number): string {
@@ -35,7 +46,7 @@ export function EvidenceList({ evidence }: { evidence: EvidenceItem[] }) {
         return (
           <li key={file._id}>
             <a
-              href={file.fileUrl}
+              href={evidenceHref(file._id)}
               target="_blank"
               rel="noreferrer noopener"
               className="surface-sunken hover:border-primary group rounded-control flex items-center gap-2.5 border px-3 py-2 transition-colors"

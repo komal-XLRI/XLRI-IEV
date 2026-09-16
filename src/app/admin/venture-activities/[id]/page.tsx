@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PageHeader } from '@/components/layout/AppShell';
+import { Card, CardHeader } from '@/components/ui/Card';
+import { ClipboardList } from 'lucide-react';
 import {
   getSupportActivitiesForVentureActivity,
   getVentureActivity,
@@ -9,6 +11,8 @@ import {
 } from '@/services/ventures/ventureActivityService';
 import { listTerms } from '@/services/academic/academicService';
 import { EditVentureActivity } from '@/components/admin/EditVentureActivity';
+import { ActivitySubmissionsTable } from '@/components/admin/ActivitySubmissionsTable';
+import { listSubmissionsForActivity } from '@/services/submissions/submissionService';
 import { serialize } from '@/lib/utils/serialize';
 import { isValidObjectId } from '@/lib/utils/ids';
 
@@ -23,12 +27,15 @@ export default async function EditVentureActivityPage({
   const { id } = await params;
   if (!isValidObjectId(id)) notFound();
 
-  const [activity, terms, allSupports, mappedSupports] = await Promise.all([
+  const [activity, terms, allSupports, mappedSupports, submissions] = await Promise.all([
     getVentureActivity(id),
     listTerms(),
     listSupportActivities(),
     getSupportActivitiesForVentureActivity(id),
+    listSubmissionsForActivity(id),
   ]);
+
+  const awaiting = submissions.filter((row) => row.status === 'UNDER_REVIEW').length;
 
   return (
     <>
@@ -51,6 +58,20 @@ export default async function EditVentureActivityPage({
           </span>
         }
       />
+
+      <Card className="mb-4">
+        <CardHeader
+          title="Student submissions"
+          description={
+            submissions.length === 0
+              ? 'Nobody is on this activity yet.'
+              : `${submissions.length} student(s) · ${awaiting} awaiting a verdict · open one to read the work, see the files and review it`
+          }
+          icon={ClipboardList}
+        />
+
+        <ActivitySubmissionsTable rows={submissions} />
+      </Card>
 
       <EditVentureActivity
         activity={serialize({

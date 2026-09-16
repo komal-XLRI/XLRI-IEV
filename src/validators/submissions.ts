@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { REVIEW_DECISIONS } from '@/lib/constants/status';
+import { REVIEW_DECISIONS, REVIEWER_TYPES } from '@/lib/constants/status';
 import { ALLOWED_EVIDENCE_MIME_TYPES, MAX_EVIDENCE_FILE_BYTES } from '@/lib/constants/uploads';
 import { objectId } from './common';
 
@@ -56,7 +56,35 @@ export const registerEvidenceSchema = z.object({
   version: z.coerce.number().int().positive(),
 });
 
+/**
+ * The same decision, filed by an administrator for a reviewer who is not the
+ * one logged in.
+ *
+ * `reviewerType` has to be stated here, because it cannot be derived from the
+ * caller's role the way it is for a reviewer filing their own verdict. Which
+ * person that resolves to is decided by the server from the venture's current
+ * assignment, never sent by the form.
+ */
+export const reviewOnBehalfSchema = createReviewSchema.extend({
+  reviewerType: z.enum(REVIEWER_TYPES, { message: 'Choose faculty or mentor' }),
+});
+
+/**
+ * A correction to a verdict already on record.
+ *
+ * The reviewer it belongs to is not in here and cannot be changed: an edit
+ * fixes what was decided, not who decided it. A verdict filed against the
+ * wrong reviewer is deleted and filed again.
+ */
+export const updateReviewSchema = z.object({
+  reviewId: objectId,
+  status: z.enum(REVIEW_DECISIONS),
+  comments: z.string().trim().max(4000).optional().or(z.literal('')),
+});
+
 export type CreateSubmissionInput = z.infer<typeof createSubmissionSchema>;
+export type UpdateReviewInput = z.infer<typeof updateReviewSchema>;
 export type CreateReviewInput = z.infer<typeof createReviewSchema>;
+export type ReviewOnBehalfInput = z.infer<typeof reviewOnBehalfSchema>;
 export type RequestUploadSignatureInput = z.infer<typeof requestUploadSignatureSchema>;
 export type RegisterEvidenceInput = z.infer<typeof registerEvidenceSchema>;

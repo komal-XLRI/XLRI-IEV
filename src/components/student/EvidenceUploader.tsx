@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { FormMessage } from '@/components/ui/FormMessage';
 import { cn } from '@/lib/utils/cn';
-import { formatBytes, type EvidenceItem } from '@/components/venture/EvidenceList';
+import { evidenceHref, formatBytes, type EvidenceItem } from '@/components/venture/EvidenceList';
 import {
   EVIDENCE_ACCEPT_ATTRIBUTE,
   EVIDENCE_FORMAT_GROUPS,
@@ -462,7 +462,7 @@ export function EvidenceUploader({
                 </span>
 
                 <a
-                  href={file.fileUrl}
+                  href={evidenceHref(file._id)}
                   target="_blank"
                   rel="noreferrer noopener"
                   className="text-subtle-foreground hover:text-primary rounded-md p-1.5 transition-colors"

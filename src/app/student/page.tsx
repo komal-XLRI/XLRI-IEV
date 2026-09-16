@@ -14,7 +14,9 @@ import { connectToDatabase } from '@/lib/db/mongoose';
 import { User } from '@/models';
 import { ExportMenu } from '@/components/export/ExportMenu';
 import { NextWorkshop } from '@/components/student/NextWorkshop';
+import { ReviewFeedback } from '@/components/student/ReviewFeedback';
 import { listWorkshopsForStudent } from '@/services/workshops/workshopService';
+import { getReviewFeedbackForStudent } from '@/services/reviews/reviewService';
 
 export const metadata: Metadata = { title: 'My dashboard' };
 export const dynamic = 'force-dynamic';
@@ -49,8 +51,9 @@ export default async function StudentDashboardPage() {
   }
 
   await connectToDatabase();
-  const [progress, faculty, mentor] = await Promise.all([
+  const [progress, reviewFeedback, faculty, mentor] = await Promise.all([
     getVentureProgress(venture._id.toString()),
+    getReviewFeedbackForStudent(venture._id.toString()),
     venture.facultyId ? User.findById(venture.facultyId).select('name email').lean().exec() : null,
     venture.mentorId ? User.findById(venture.mentorId).select('name email').lean().exec() : null,
   ]);
@@ -128,6 +131,10 @@ export default async function StudentDashboardPage() {
           programme office before submitting.
         </FormMessage>
       ) : null}
+
+      <div className="mt-5">
+        <ReviewFeedback reviews={reviewFeedback} />
+      </div>
 
       <NextWorkshop workshop={nextWorkshop} />
 

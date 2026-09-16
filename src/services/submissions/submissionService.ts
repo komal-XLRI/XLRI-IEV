@@ -248,3 +248,107 @@ export async function getSubmissionBundle(submissionId: string) {
 
   return { submission, record, venture, activity, reviews, evidence };
 }
+
+/** One student's standing on one venture activity, for the administrator's table. */
+export interface ActivitySubmissionRow {
+  recordId: string;
+  /** The current attempt, or null when the student has not submitted yet. */
+  submissionId: string | null;
+  studentId: string;
+  studentName: string;
+  ventureName: string;
+  status: string;
+  attemptNumber: number;
+  maxAttempts: number;
+  submittedAt: string | null;
+  facultyReviewStatus: string;
+  mentorReviewStatus: string;
+  evidenceCount: number;
+}
+
+/**
+ * Every student on one venture activity, submitted or not.
+ *
+ * The ones who have not submitted are listed too. A page that showed only the
+ * submissions would answer "what is waiting for me" while quietly hiding "who
+ * has not turned anything in", which is the question the same person asks
+ * thirty seconds later.
+ */
+export async function listSubmissionsForActivity(
+  ventureActivityId: string,
+): Promise<ActivitySubmissionRow[]> {
+  await connectToDatabase();
+
+  const activity = await VentureActivity.findById(ventureActivityId)
+    .select('maxAttempts')
+    .lean()
+    .exec();
+  if (!activity) throw new NotFoundError('Venture activity not found');
+
+  const records = await StudentVentureActivity.find({ ventureActivityId })
+    .select(
+      'studentVentureId currentSubmissionId attemptNumber status facultyReviewStatus mentorReviewStatus',
+    )
+    .lean()
+    .exec();
+  if (records.length === 0) return [];
+
+  const submissionIds = records
+    .map((record) => record.currentSubmissionId)
+    .filter((id): id is NonNullable<typeof id> => Boolean(id));
+
+  const [ventures, submissions, evidence] = await Promise.all([
+    StudentVenture.find({ _id: { $in: records.map((r) => r.studentVentureId) } })
+      .select('ventureName studentId')
+      .populate<{ studentId: { _id: unknown; name: string } | null }>('studentId', 'name')
+      .lean()
+      .exec(),
+    VentureSubmission.find({ _id: { $in: submissionIds } })
+      .select('_id submittedAt')
+      .lean()
+      .exec(),
+    Evidence.find({ submissionId: { $in: submissionIds } })
+      .select('submissionId')
+      .lean()
+      .exec(),
+  ]);
+
+  const ventureById = new Map(ventures.map((v) => [v._id.toString(), v]));
+  const submissionById = new Map(submissions.map((s) => [s._id.toString(), s]));
+
+  const filesBySubmission = new Map<string, number>();
+  for (const file of evidence) {
+    const key = file.submissionId?.toString();
+    if (key) filesBySubmission.set(key, (filesBySubmission.get(key) ?? 0) + 1);
+  }
+
+  const rows = records.map((record) => {
+    const venture = ventureById.get(record.studentVentureId.toString());
+    const submissionId = record.currentSubmissionId?.toString() ?? null;
+    const submission = submissionId ? submissionById.get(submissionId) : undefined;
+
+    return {
+      recordId: record._id.toString(),
+      submissionId,
+      studentId: venture?.studentId?._id?.toString() ?? '',
+      studentName: venture?.studentId?.name ?? 'Unknown student',
+      ventureName: venture?.ventureName ?? '—',
+      status: record.status,
+      attemptNumber: record.attemptNumber,
+      maxAttempts: activity.maxAttempts,
+      submittedAt: submission?.submittedAt ? submission.submittedAt.toISOString() : null,
+      facultyReviewStatus: record.facultyReviewStatus,
+      mentorReviewStatus: record.mentorReviewStatus,
+      evidenceCount: submissionId ? (filesBySubmission.get(submissionId) ?? 0) : 0,
+    };
+  });
+
+  // Waiting on a verdict first, then everyone else by name: the list is read to
+  // find what needs doing, not to look somebody up alphabetically.
+  return rows.sort((a, b) => {
+    const aWaiting = a.status === 'UNDER_REVIEW' ? 0 : 1;
+    const bWaiting = b.status === 'UNDER_REVIEW' ? 0 : 1;
+    if (aWaiting !== bWaiting) return aWaiting - bWaiting;
+    return a.studentName.localeCompare(b.studentName);
+  });
+}

@@ -5,11 +5,14 @@ import { DataTable, type DataColumn, type DataRow } from '@/components/ui/DataTa
 import { textCell } from '@/components/ui/dataTableModel';
 import { Badge } from '@/components/ui/Badge';
 import { DualReviewInline } from '@/components/venture/ReviewProgress';
+import Link from 'next/link';
+import { ReviewAdminControls } from './ReviewAdminControls';
 import { formatDate, formatDateTime } from '@/lib/utils/dates';
 import type { ReviewStatus, ReviewerType } from '@/lib/constants/status';
 
 export interface PendingRow {
   recordId: string;
+  submissionId: string | null;
   studentName: string;
   ventureName: string;
   activityCode: string;
@@ -18,6 +21,8 @@ export interface PendingRow {
   maxAttempts: number;
   facultyReviewStatus: ReviewStatus;
   mentorReviewStatus: ReviewStatus;
+  facultyName: string | null;
+  mentorName: string | null;
   awaitingSince: string;
 }
 
@@ -48,6 +53,10 @@ const DECISION_LABEL = {
  * Both reviewers' states are shown on every row rather than one combined
  * status, because "faculty approved, mentor pending" and "both pending" need
  * completely different follow-up and the summary status cannot tell them apart.
+ *
+ * A row opens the same review screen faculty and mentors work from, where an
+ * administrator can file the verdict a reviewer has already given elsewhere —
+ * by email, in a meeting, on paper.
  */
 export function PendingReviewTable({ rows }: { rows: PendingRow[] }) {
   const columns: DataColumn[] = [
@@ -56,14 +65,24 @@ export function PendingReviewTable({ rows }: { rows: PendingRow[] }) {
     { key: 'activity', header: 'Activity' },
     { key: 'attempt', header: 'Attempt', align: 'center', hideBelow: 'lg' },
     { key: 'reviews', header: 'Faculty / mentor', sortable: false },
-    { key: 'since', header: 'Waiting since', align: 'right', hideBelow: 'sm' },
+    { key: 'since', header: 'Waiting since', hideBelow: 'sm' },
+    { key: 'onBehalf', header: '', align: 'right', sortable: false },
   ];
 
   const dataRows: DataRow[] = rows.map((row) => ({
     id: row.recordId,
     cells: [
       {
-        node: <span className="font-medium">{row.studentName}</span>,
+        node: row.submissionId ? (
+          <Link
+            href={`/admin/reviews/${row.submissionId}`}
+            className="hover:text-primary font-medium hover:underline"
+          >
+            {row.studentName}
+          </Link>
+        ) : (
+          <span className="font-medium">{row.studentName}</span>
+        ),
         sort: row.studentName,
         text: row.studentName,
       },
@@ -102,6 +121,18 @@ export function PendingReviewTable({ rows }: { rows: PendingRow[] }) {
         sort: row.awaitingSince,
         text: formatDate(row.awaitingSince),
       },
+      {
+        node: row.submissionId ? (
+          <Link
+            href={`/admin/reviews/${row.submissionId}`}
+            className="bg-secondary text-secondary-foreground border-input-border hover:bg-secondary-hover hover:border-border-strong inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors"
+          >
+            Open review
+          </Link>
+        ) : (
+          <span className="type-caption">—</span>
+        ),
+      },
     ],
   }));
 
@@ -126,6 +157,7 @@ export function ReviewHistoryTable({ rows }: { rows: HistoryRow[] }) {
     { key: 'type', header: 'Type', hideBelow: 'sm' },
     { key: 'decision', header: 'Decision' },
     { key: 'comments', header: 'Comments', hideBelow: 'lg', clamp: true, sortable: false },
+    { key: 'actions', header: '', align: 'right', sortable: false },
   ];
 
   const dataRows: DataRow[] = rows.map((row) => ({
@@ -175,6 +207,19 @@ export function ReviewHistoryTable({ rows }: { rows: HistoryRow[] }) {
           <span className="text-muted-foreground">—</span>
         ),
         text: row.comments ?? '',
+      },
+      {
+        node: (
+          <ReviewAdminControls
+            review={{
+              reviewId: row.id,
+              reviewerType: row.reviewerType,
+              reviewerName: row.reviewerName,
+              status: row.status,
+              comments: row.comments ?? '',
+            }}
+          />
+        ),
       },
     ],
   }));

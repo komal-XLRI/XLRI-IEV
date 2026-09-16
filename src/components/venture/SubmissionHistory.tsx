@@ -24,7 +24,6 @@ export interface HistoryEntry {
   evidence: Array<{
     _id: string;
     fileName: string;
-    fileUrl: string;
     fileType: string;
     fileSize: number;
     uploadedAt: string;
