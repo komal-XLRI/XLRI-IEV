@@ -61,6 +61,39 @@ export function verifyUploadResponse(params: {
   return expected === params.signature;
 }
 
+/** How long a delivery link an evidence viewer is handed stays valid. */
+export const EVIDENCE_URL_TTL_SECONDS = 5 * 60;
+
+/**
+ * A short-lived, signed delivery URL for one asset.
+ *
+ * Evidence is delivered through this rather than through the stored
+ * `secure_url` for two reasons. The account restricts delivery of PDFs, so a
+ * plain URL to one comes back `401 deny or ACL failure` — and even a signed
+ * *delivery* URL does; only this authenticated download endpoint is served.
+ * And a public URL stays readable by anyone who has ever seen it, which is the
+ * wrong property for a student's coursework.
+ *
+ * The format argument is empty on purpose: a raw public_id already carries its
+ * extension, and Cloudinary resolves an image or video from the id alone.
+ */
+export function signedAssetUrl(params: {
+  publicId: string;
+  resourceType: CloudinaryResourceType;
+  /** Save the file rather than display it in the browser. */
+  download?: boolean;
+  ttlSeconds?: number;
+}): string {
+  const client = getCloudinary();
+
+  return client.utils.private_download_url(params.publicId, '', {
+    resource_type: params.resourceType,
+    type: 'upload',
+    attachment: params.download ?? false,
+    expires_at: Math.floor(Date.now() / 1000) + (params.ttlSeconds ?? EVIDENCE_URL_TTL_SECONDS),
+  });
+}
+
 export async function deleteUpload(
   publicId: string,
   resourceType: CloudinaryResourceType,

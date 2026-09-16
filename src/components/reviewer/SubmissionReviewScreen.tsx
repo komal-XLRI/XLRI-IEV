@@ -6,12 +6,13 @@ import { ActivityStatusBadge, Badge, ReviewStatusBadge } from '@/components/ui/B
 import { EvidenceList } from '@/components/venture/EvidenceList';
 import { ReviewForm } from './ReviewForm';
 import { getSubmissionBundle } from '@/services/submissions/submissionService';
-import { getPreviousFeedback } from '@/services/reviews/reviewService';
+import { getAssignedReviewers, getPreviousFeedback } from '@/services/reviews/reviewService';
 import { canReview } from '@/lib/permissions/reviewAccess';
 import { formatDateRange, formatDateTime } from '@/lib/utils/dates';
 import { isValidObjectId } from '@/lib/utils/ids';
 import { serialize } from '@/lib/utils/serialize';
 import type { Role } from '@/lib/constants/roles';
+import type { ReviewerType } from '@/lib/constants/status';
 
 const DECISION_TONE = {
   APPROVED: 'success',
@@ -20,9 +21,17 @@ const DECISION_TONE = {
 } as const;
 
 /**
- * The review screen. Shared by Faculty and Mentor; the reviewer type is taken
- * from the signed-in role, and assignment is re-checked here as well as in the
- * service that records the verdict.
+ * The review screen. Shared by Faculty, Mentor and Admin.
+ *
+ * For a reviewer, the reviewer type is taken from the signed-in role and
+ * assignment is re-checked here as well as in the service that records the
+ * verdict — one half of the dual review, theirs.
+ *
+ * An administrator is not a reviewer and gets no half of their own. They see
+ * both, and can file either one for the person it is assigned to, which is the
+ * same screen doing the same thing twice rather than a second, lesser way to
+ * review. Everything that constrains a reviewer still applies: the rules live
+ * in `createReviewOnBehalf`, not here.
  */
 export async function SubmissionReviewScreen({
   submissionId,
@@ -30,7 +39,7 @@ export async function SubmissionReviewScreen({
   basePath,
 }: {
   submissionId: string;
-  reviewer: { userId: string; role: Extract<Role, 'FACULTY' | 'MENTOR'> };
+  reviewer: { userId: string; role: Extract<Role, 'FACULTY' | 'MENTOR' | 'ADMIN'> };
   basePath: string;
 }) {
   if (!isValidObjectId(submissionId)) notFound();
@@ -38,16 +47,25 @@ export async function SubmissionReviewScreen({
   const bundle = await getSubmissionBundle(submissionId);
   const { submission, record, venture, activity, reviews, evidence } = bundle;
 
-  const permission = canReview(
-    reviewer.role,
-    { facultyId: venture.facultyId, mentorId: venture.mentorId },
-    reviewer.userId,
-  );
-  if (!permission.allowed || !permission.reviewerType) forbidden();
+  const isAdmin = reviewer.role === 'ADMIN';
 
-  const reviewerType = permission.reviewerType;
-  const myReview = reviews.find((r) => r.reviewerType === reviewerType) ?? null;
-  const otherReview = reviews.find((r) => r.reviewerType !== reviewerType) ?? null;
+  const reviewerType: ReviewerType | null = isAdmin ? null : assignedType();
+
+  function assignedType(): ReviewerType {
+    const permission = canReview(
+      reviewer.role,
+      { facultyId: venture.facultyId, mentorId: venture.mentorId },
+      reviewer.userId,
+    );
+    if (!permission.allowed || !permission.reviewerType) forbidden();
+    return permission.reviewerType;
+  }
+
+  const facultyReview = reviews.find((r) => r.reviewerType === 'FACULTY') ?? null;
+  const mentorReview = reviews.find((r) => r.reviewerType === 'MENTOR') ?? null;
+
+  const myReview = reviewerType === 'FACULTY' ? facultyReview : mentorReview;
+  const otherReview = reviewerType === 'FACULTY' ? mentorReview : facultyReview;
 
   const myStatus =
     reviewerType === 'FACULTY' ? record.facultyReviewStatus : record.mentorReviewStatus;
@@ -58,6 +76,12 @@ export async function SubmissionReviewScreen({
   const previousFeedback = (await getPreviousFeedback(record._id.toString())).filter(
     (entry) => entry.attemptNumber < submission.attemptNumber,
   );
+
+  // Only an administrator needs these: a reviewer is one of them and never
+  // files for the other.
+  const assigned = isAdmin
+    ? await getAssignedReviewers(record.studentVentureId.toString())
+    : { facultyName: null, mentorName: null };
 
   return (
     <>
@@ -155,41 +179,76 @@ export async function SubmissionReviewScreen({
         </div>
 
         <div className="space-y-4">
-          <ReviewForm
-            submissionId={submissionId}
-            reviewerType={reviewerType}
-            alreadyReviewed={Boolean(myReview)}
-            isCurrentAttempt={isCurrentAttempt}
-            myStatus={myStatus}
-            otherStatus={otherStatus}
-            existingComments={myReview?.comments ?? ''}
-          />
+          {isAdmin ? (
+            <>
+              {/* Both halves, each filed for the person it belongs to. */}
+              <ReviewForm
+                submissionId={submissionId}
+                reviewerType="FACULTY"
+                filedBy="admin"
+                reviewerName={assigned.facultyName}
+                alreadyReviewed={Boolean(facultyReview)}
+                isCurrentAttempt={isCurrentAttempt}
+                myStatus={record.facultyReviewStatus}
+                otherStatus={record.mentorReviewStatus}
+                existingComments={facultyReview?.comments ?? ''}
+                recordedByName={facultyReview?.reviewerId?.name ?? null}
+                reviewId={facultyReview?._id?.toString() ?? null}
+              />
 
-          <Card>
-            <CardHeader title="The other reviewer" />
-            <CardBody className="text-sm">
-              {otherReview ? (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone={DECISION_TONE[otherReview.status]}>
-                      {otherReview.status.replace(/_/g, ' ').toLowerCase()}
-                    </Badge>
-                    <span className="text-muted-foreground text-xs">
-                      {otherReview.reviewerId?.name} · {formatDateTime(otherReview.reviewedAt)}
-                    </span>
-                  </div>
-                  {otherReview.comments ? (
-                    <p className="whitespace-pre-wrap">{otherReview.comments}</p>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-muted-foreground">
-                  The {reviewerType === 'FACULTY' ? 'mentor' : 'faculty'} has not reviewed this
-                  attempt yet. Your approval alone will not complete the activity.
-                </p>
-              )}
-            </CardBody>
-          </Card>
+              <ReviewForm
+                submissionId={submissionId}
+                reviewerType="MENTOR"
+                filedBy="admin"
+                reviewerName={assigned.mentorName}
+                alreadyReviewed={Boolean(mentorReview)}
+                isCurrentAttempt={isCurrentAttempt}
+                myStatus={record.mentorReviewStatus}
+                otherStatus={record.facultyReviewStatus}
+                existingComments={mentorReview?.comments ?? ''}
+                recordedByName={mentorReview?.reviewerId?.name ?? null}
+                reviewId={mentorReview?._id?.toString() ?? null}
+              />
+            </>
+          ) : (
+            <>
+              <ReviewForm
+                submissionId={submissionId}
+                reviewerType={reviewerType ?? 'FACULTY'}
+                alreadyReviewed={Boolean(myReview)}
+                isCurrentAttempt={isCurrentAttempt}
+                myStatus={myStatus}
+                otherStatus={otherStatus}
+                existingComments={myReview?.comments ?? ''}
+              />
+
+              <Card>
+                <CardHeader title="The other reviewer" />
+                <CardBody className="text-sm">
+                  {otherReview ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={DECISION_TONE[otherReview.status]}>
+                          {otherReview.status.replace(/_/g, ' ').toLowerCase()}
+                        </Badge>
+                        <span className="text-muted-foreground text-xs">
+                          {otherReview.reviewerId?.name} · {formatDateTime(otherReview.reviewedAt)}
+                        </span>
+                      </div>
+                      {otherReview.comments ? (
+                        <p className="whitespace-pre-wrap">{otherReview.comments}</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      The {reviewerType === 'FACULTY' ? 'mentor' : 'faculty'} has not reviewed this
+                      attempt yet. Your approval alone will not complete the activity.
+                    </p>
+                  )}
+                </CardBody>
+              </Card>
+            </>
+          )}
         </div>
       </div>
     </>
