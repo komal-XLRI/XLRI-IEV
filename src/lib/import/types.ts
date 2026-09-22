@@ -35,6 +35,14 @@ export interface ImportContext {
   actorId: string;
   /** Query parameters the import was started with, unvalidated. */
   params: Record<string, string>;
+  /**
+   * The heading each field was read from in this particular file.
+   *
+   * Empty unless the file has been parsed, so a spec reads it defensively.
+   * Only useful where the heading is content — a survey question, say —
+   * rather than a column name nobody needs to keep.
+   */
+  headings?: Record<string, string>;
 }
 
 export interface ImportSpec<Parsed> {

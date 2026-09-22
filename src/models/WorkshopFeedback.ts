@@ -49,6 +49,24 @@ export interface IWorkshopFeedback {
   /** Their key takeaway, in their own words. Often left blank. */
   takeaway?: string;
 
+  /**
+   * The questions this student was actually asked, as the form worded them.
+   *
+   * Kept with the response rather than against the workshop, because that is
+   * what makes a response self-describing: a "4" means nothing without the
+   * question, and the questions are rewritten for every workshop — the IP Law
+   * form asks about IP Law. Storing them per response costs a few hundred
+   * bytes and means a re-import can change the wording without stranding the
+   * answers that were given under the old wording.
+   */
+  questions?: {
+    overall?: string;
+    understanding?: string;
+    speaker?: string;
+    relevance?: string;
+    takeaway?: string;
+  };
+
   /** Which administrator imported it, and when. */
   importedBy: Types.ObjectId;
   importedAt: Date;
@@ -64,6 +82,24 @@ const rating = {
   max: 5,
   default: null,
 } as const;
+
+/**
+ * The questions one form asked.
+ *
+ * A survey question is a sentence, sometimes two, with the scale spelled out
+ * inside it — "(5 being the highest and 1 being the lowest)" — so 500 is a
+ * length that fits a real one rather than a label.
+ */
+const questionsSchema = new Schema(
+  {
+    overall: { type: String, trim: true, maxlength: 500 },
+    understanding: { type: String, trim: true, maxlength: 500 },
+    speaker: { type: String, trim: true, maxlength: 500 },
+    relevance: { type: String, trim: true, maxlength: 500 },
+    takeaway: { type: String, trim: true, maxlength: 500 },
+  },
+  { _id: false },
+);
 
 const workshopFeedbackSchema = new Schema<IWorkshopFeedback>(
   {
@@ -83,6 +119,11 @@ const workshopFeedbackSchema = new Schema<IWorkshopFeedback>(
 
     // Long, because it is a free-text box and people write paragraphs in it.
     takeaway: { type: String, trim: true, maxlength: 4000 },
+
+    // Its own schema rather than an inline object: an inline one with a `type`
+    // key reads as a SchemaType declaration and the whole field is dropped
+    // without complaint, which is exactly what happened the first time.
+    questions: { type: questionsSchema, default: undefined },
 
     importedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     importedAt: { type: Date, required: true, default: () => new Date() },

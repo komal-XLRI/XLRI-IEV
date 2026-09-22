@@ -10,6 +10,14 @@
 
 export interface ParsedCsv {
   headers: string[];
+  /**
+   * The heading each field was actually read from.
+   *
+   * Which matters when the heading is content rather than plumbing: a survey
+   * export heads its columns with the questions students were asked, and those
+   * questions are worth keeping. A field no column supplied is absent.
+   */
+  matched: Record<string, string>;
   /** One record per row, keyed by header. Extra columns are ignored. */
   rows: Array<Record<string, string>>;
   /** 1-based line number in the source, for error messages. */
@@ -197,7 +205,7 @@ export function parseCsv(input: string, expected: ExpectedColumn[]): ParsedCsv {
  */
 export function parseGrid(raw: string[][], expected: ExpectedColumn[]): ParsedCsv {
   if (raw.length === 0) {
-    return { headers: [], rows: [], lineNumbers: [] };
+    return { headers: [], matched: {}, rows: [], lineNumbers: [] };
   }
 
   const headerRow = raw[0]!.map((cell) => cell.replace(/^\t/, '').trim());
@@ -261,7 +269,13 @@ export function parseGrid(raw: string[][], expected: ExpectedColumn[]): ParsedCs
     lineNumbers.push(i + 1);
   }
 
-  return { headers: headerRow, rows, lineNumbers };
+  const matched: Record<string, string> = {};
+  for (const [field, index] of columnFor) {
+    const heading = headerRow[index];
+    if (heading) matched[field] = heading;
+  }
+
+  return { headers: headerRow, matched, rows, lineNumbers };
 }
 
 /** Detects whether a header row is present at all. */

@@ -36,11 +36,27 @@ export interface WorkshopFeedbackRow {
   submittedRollNumber: string;
 }
 
+/** The questions a form asked, as it worded them. */
+export interface FeedbackQuestions {
+  overall?: string;
+  understanding?: string;
+  speaker?: string;
+  relevance?: string;
+  takeaway?: string;
+}
+
 export interface WorkshopFeedbackSummary {
   /** How many students responded. */
   responses: number;
   /** How many wrote something in the free-text box. */
   written: number;
+  /**
+   * The questions asked, taken from the responses themselves.
+   *
+   * From the most recently imported response rather than the first: if the
+   * form was reworded and re-imported, the current wording is the one to show.
+   */
+  questions: FeedbackQuestions;
 }
 
 export interface WorkshopFeedbackView {
@@ -102,10 +118,17 @@ export async function getWorkshopFeedback(workshopId: string): Promise<WorkshopF
     };
   });
 
+  // Whichever response was imported last carries the wording to show. They
+  // agree in the ordinary case, where one file was imported once.
+  const latest = [...feedback].sort(
+    (a, b) => a.importedAt.getTime() - b.importedAt.getTime(),
+  )[feedback.length - 1];
+
   return {
     summary: {
       responses: rows.length,
       written: rows.filter((row) => row.takeaway.trim() !== '').length,
+      questions: latest?.questions ?? {},
     },
     rows,
   };
@@ -134,6 +157,8 @@ export interface FeedbackImportRow {
   speakerRating?: number | null;
   relevanceRating?: number | null;
   takeaway?: string;
+  /** How this file worded its questions. */
+  questions?: FeedbackQuestions;
 }
 
 /**
@@ -225,6 +250,7 @@ export async function saveWorkshopFeedback(
         speakerRating: row.speakerRating ?? null,
         relevanceRating: row.relevanceRating ?? null,
         takeaway: row.takeaway,
+        questions: row.questions,
         importedBy,
         importedAt: new Date(),
       },
