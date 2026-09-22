@@ -36,6 +36,37 @@ export interface WorkshopFeedbackRow {
   submittedRollNumber: string;
 }
 
+/**
+ * The four scale questions, in the order the form asks them.
+ *
+ * `label` is a short stand-in for a table heading. The question itself is
+ * whatever the imported file called it, which is different for every workshop.
+ */
+export const FEEDBACK_QUESTIONS = [
+  { key: 'overall', field: 'overallRating', label: 'Overall quality', number: 1 },
+  { key: 'understanding', field: 'understandingRating', label: 'Understood', number: 2 },
+  { key: 'speaker', field: 'speakerRating', label: 'Speaker', number: 3 },
+  { key: 'relevance', field: 'relevanceRating', label: 'Relevance', number: 4 },
+] as const;
+
+export type FeedbackQuestionKey = (typeof FEEDBACK_QUESTIONS)[number]['key'];
+
+/** How one question was answered across every response. */
+export interface QuestionStat {
+  key: FeedbackQuestionKey;
+  number: number;
+  /** Short heading, for a column. */
+  label: string;
+  /** The question as the form worded it. Empty if the file had no such column. */
+  question: string;
+  /** How many people answered this one. Not every question is compulsory. */
+  answered: number;
+  /** Mean to one decimal place, or null when nobody answered. */
+  average: number | null;
+  /** How many gave each score. */
+  distribution: Record<1 | 2 | 3 | 4 | 5, number>;
+}
+
 /** The questions a form asked, as it worded them. */
 export interface FeedbackQuestions {
   overall?: string;
@@ -50,6 +81,14 @@ export interface WorkshopFeedbackSummary {
   responses: number;
   /** How many wrote something in the free-text box. */
   written: number;
+  /**
+   * One entry per scale question the form actually asked.
+   *
+   * Each question is counted on its own, and a mean is never taken across
+   * questions: "the speaker" and "relevance" are different things, and one
+   * number covering both would say nothing about either.
+   */
+  stats: QuestionStat[];
   /**
    * The questions asked, taken from the responses themselves.
    *
@@ -124,11 +163,41 @@ export async function getWorkshopFeedback(workshopId: string): Promise<WorkshopF
     (a, b) => a.importedAt.getTime() - b.importedAt.getTime(),
   )[feedback.length - 1];
 
+  const questions = latest?.questions ?? {};
+
+  const stats: QuestionStat[] = FEEDBACK_QUESTIONS.map((question) => {
+    const answers = rows
+      .map((row) => row[question.field])
+      .filter((value): value is number => typeof value === 'number');
+
+    const distribution: Record<1 | 2 | 3 | 4 | 5, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    for (const answer of answers) {
+      if (answer >= 1 && answer <= 5) distribution[answer as 1 | 2 | 3 | 4 | 5] += 1;
+    }
+
+    return {
+      key: question.key,
+      number: question.number,
+      label: question.label,
+      question: questions[question.key] ?? '',
+      answered: answers.length,
+      average:
+        answers.length === 0
+          ? null
+          : Math.round((answers.reduce((total, value) => total + value, 0) / answers.length) * 10) /
+            10,
+      distribution,
+    };
+  });
+
   return {
     summary: {
       responses: rows.length,
       written: rows.filter((row) => row.takeaway.trim() !== '').length,
-      questions: latest?.questions ?? {},
+      questions,
+      // A question nobody was asked is not a question with no answers: a sheet
+      // without that column should show nothing, not a row of zeroes.
+      stats: stats.filter((stat) => stat.answered > 0 || stat.question !== ''),
     },
     rows,
   };
