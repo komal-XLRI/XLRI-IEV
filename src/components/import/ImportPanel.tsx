@@ -18,6 +18,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Field, TextArea } from '@/components/ui/Field';
 import { FormMessage } from '@/components/ui/FormMessage';
 import { Badge } from '@/components/ui/Badge';
+import { AnchoredMenu } from '@/components/ui/AnchoredMenu';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils/cn';
 import type { ImportOutcome } from '@/lib/import/types';
@@ -87,14 +88,38 @@ export function ImportPanel({
   title,
   description,
   columns,
+  params,
+  label = 'Import',
+  disabled = false,
+  disabledHint,
 }: {
   spec: string;
   title: string;
   description: string;
   columns: ImportColumnView[];
+  /**
+   * What the import belongs to, when the file does not say.
+   *
+   * A feedback export is one workshop's responses and carries no column naming
+   * it, so the page supplies that here and it rides on every request —
+   * including the template download, so the file that comes back is the file
+   * this import will accept.
+   */
+  params?: Record<string, string>;
+  /** Overrides the button text where "Import" alone would not say what of. */
+  label?: string;
+  /** Set when there is nothing to import against yet. */
+  disabled?: boolean;
+  disabledHint?: string;
 }) {
   const router = useRouter();
   const { notify } = useToast();
+
+  const query = new URLSearchParams(params ?? {}).toString();
+  const endpoint = (extra?: string) => {
+    const search = [query, extra].filter(Boolean).join('&');
+    return search ? `/api/import/${spec}?${search}` : `/api/import/${spec}`;
+  };
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [open, setOpen] = useState(false);
@@ -110,33 +135,13 @@ export function ImportPanel({
   const [busy, setBusy] = useState<'preview' | 'commit' | null>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   // Set when the menu asked for the paste box rather than a file, and cleared
   // once the dialog has rendered it — the field does not exist to focus yet at
   // the moment the menu item is clicked. A ref rather than state: nothing
   // renders differently for it, and a state flag here would only buy a second
   // render pass to switch itself back off.
   const focusPaste = useRef(false);
-
-  // Same dismissal contract as the Export menu beside it: click anywhere else,
-  // or press Escape.
-  useEffect(() => {
-    if (!menuOpen) return;
-
-    const onPointerDown = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenuOpen(false);
-    };
-
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [menuOpen]);
 
   useEffect(() => {
     if (!open || !focusPaste.current) return;
@@ -194,9 +199,9 @@ export function ImportPanel({
 
         // No Content-Type header: the browser has to set the multipart
         // boundary itself, and naming the type strips it.
-        response = await fetch(`/api/import/${spec}`, { method: 'POST', body: payload });
+        response = await fetch(endpoint(), { method: 'POST', body: payload });
       } else {
-        response = await fetch(`/api/import/${spec}`, {
+        response = await fetch(endpoint(), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ csv, dryRun }),
@@ -258,16 +263,19 @@ export function ImportPanel({
 
   return (
     <>
-      <div ref={menuRef} className="relative inline-block">
+      <div className="inline-block">
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => setMenuOpen((value) => !value)}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          className="surface-card border-input-border hover:bg-surface-hover hover:border-border-strong inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+          disabled={disabled}
+          title={disabled ? disabledHint : undefined}
+          className="surface-card border-input-border hover:bg-surface-hover hover:border-border-strong disabled:text-subtle-foreground inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent"
         >
           <FileUp className="size-4" aria-hidden="true" />
-          Import
+          {label}
           <ChevronDown
             className={cn(
               'text-muted-foreground size-3.5 transition-transform',
@@ -277,11 +285,14 @@ export function ImportPanel({
           />
         </button>
 
-        {menuOpen ? (
-          <div
-            role="menu"
-            className="surface-overlay absolute right-0 z-30 mt-1 w-64 overflow-hidden rounded-lg"
-          >
+        <AnchoredMenu
+          open={menuOpen}
+          anchorRef={triggerRef}
+          onClose={() => setMenuOpen(false)}
+          width={272}
+          label={`${label} options`}
+        >
+          <div>
             <p className="text-muted-foreground border-b px-3 py-2 text-xs">
               Every format lands in the same preview. Nothing is written until you confirm it.
             </p>
@@ -319,11 +330,7 @@ export function ImportPanel({
                 <a
                   key={template.format}
                   role="menuitem"
-                  href={
-                    template.format === 'xlsx'
-                      ? `/api/import/${spec}?format=xlsx`
-                      : `/api/import/${spec}`
-                  }
+                  href={template.format === 'xlsx' ? endpoint('format=xlsx') : endpoint()}
                   download
                   onClick={() => setMenuOpen(false)}
                   className="hover:bg-surface-hover flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors"
@@ -344,7 +351,7 @@ export function ImportPanel({
               );
             })}
           </div>
-        ) : null}
+        </AnchoredMenu>
       </div>
 
       {/* Mounted here, not in the dialog, so a menu item can open it within

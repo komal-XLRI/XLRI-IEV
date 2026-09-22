@@ -15,6 +15,8 @@ import { CreateWorkshopForm } from '@/components/admin/WorkshopForm';
 import { formatDate, toDateInputValue } from '@/lib/utils/dates';
 import { EXPERT_WORKSHOP_CODE } from '@/lib/constants/activities';
 import { ExportMenu } from '@/components/export/ExportMenu';
+import { WorkshopFeedbackImport } from '@/components/admin/WorkshopFeedbackImport';
+import { workshopFeedbackImport } from '@/services/import/specs';
 
 export const metadata: Metadata = { title: 'Workshops' };
 export const dynamic = 'force-dynamic';
@@ -64,6 +66,16 @@ export default async function AdminWorkshopsPage() {
     { key: 'topic', header: 'Topic', hideBelow: 'lg', clamp: true },
   ];
 
+  // Newest first: feedback is imported soon after a workshop runs, so the
+  // one somebody is looking for is almost always at the top.
+  const feedbackTargets = [...workshops]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .map((workshop) => ({
+      _id: workshop._id.toString(),
+      title: workshop.title,
+      date: formatDate(workshop.date),
+    }));
+
   return (
     <>
       <Card className="mb-4">
@@ -75,7 +87,20 @@ export default async function AdminWorkshopsPage() {
               : `${summary.total} workshop(s) · ${summary.published} published · ${summary.upcoming} still to run · ${summary.draft} draft`
           }
           icon={Projector}
-          action={<CreateWorkshopForm />}
+          action={
+            <span className="flex flex-wrap items-center gap-2">
+              {/* A feedback export names no workshop, so the picker beside this
+                  button asks what the file cannot say. */}
+              <WorkshopFeedbackImport
+                spec={workshopFeedbackImport.key}
+                title={workshopFeedbackImport.title}
+                description={workshopFeedbackImport.description}
+                columns={workshopFeedbackImport.columns}
+                workshops={feedbackTargets}
+              />
+              <CreateWorkshopForm />
+            </span>
+          }
         />
 
         <WorkshopTable workshops={rows} recipientCount={recipientCount} />

@@ -22,6 +22,10 @@ import { WORKSHOP_TYPE_LABELS } from '@/lib/constants/workshops';
 import { EditWorkshopForm } from '@/components/admin/WorkshopForm';
 import { SendWorkshopEmail } from '@/components/admin/SendWorkshopEmail';
 import { getWorkshop } from '@/services/workshops/workshopService';
+import { getWorkshopFeedback } from '@/services/workshops/workshopFeedbackService';
+import { workshopFeedbackImport } from '@/services/import/specs';
+import { WorkshopFeedbackPanel } from '@/components/admin/WorkshopFeedbackPanel';
+import { WorkshopFeedbackImport } from '@/components/admin/WorkshopFeedbackImport';
 import { countEmailRecipients } from '@/services/workshops/workshopEmailService';
 import { formatDate, formatDateTime, toDateInputValue } from '@/lib/utils/dates';
 import { isValidObjectId } from '@/lib/utils/ids';
@@ -47,7 +51,11 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
   const { id } = await params;
   if (!isValidObjectId(id)) notFound();
 
-  const [workshop, recipientCount] = await Promise.all([getWorkshop(id), countEmailRecipients()]);
+  const [workshop, recipientCount, feedback] = await Promise.all([
+    getWorkshop(id),
+    countEmailRecipients(),
+    getWorkshopFeedback(id),
+  ]);
 
   const email = {
     isEmailSent: workshop.isEmailSent,
@@ -110,6 +118,21 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
           </span>
         }
       />
+
+      <div className="mb-5">
+        <WorkshopFeedbackPanel
+          feedback={feedback}
+          action={
+            <WorkshopFeedbackImport
+              spec={workshopFeedbackImport.key}
+              title={workshopFeedbackImport.title}
+              description={workshopFeedbackImport.description}
+              columns={workshopFeedbackImport.columns}
+              workshopId={id}
+            />
+          }
+        />
+      </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div className="space-y-5">

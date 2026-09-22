@@ -35,6 +35,7 @@ export { RecordingFolder, RECORDING_FOLDER_KEY, type IRecordingFolder } from './
 
 export { Workshop, type IWorkshop } from './Workshop';
 export { WorkshopAttendance, type IWorkshopAttendance } from './WorkshopAttendance';
+export { WorkshopFeedback, type IWorkshopFeedback } from './WorkshopFeedback';
 
 export { VentureSubmission, type IVentureSubmission } from './VentureSubmission';
 export { Review, type IReview } from './Review';

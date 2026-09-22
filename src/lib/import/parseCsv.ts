@@ -141,11 +141,47 @@ export function normaliseHeader(header: string): string {
  * those columns were read as absent and silently dropped — from files this
  * system had produced itself.
  */
-export type ExpectedColumn = string | { field: string; label?: string };
+export type ExpectedColumn =
+  | string
+  | {
+      field: string;
+      label?: string;
+      /**
+       * Headings this column is also known by, matched exactly.
+       *
+       * For a file this system did not design the template for — a Google Form
+       * export, say — where the heading is the question a student was asked.
+       */
+      aliases?: string[];
+      /**
+       * Headings this column claims by their opening words.
+       *
+       * A survey question makes a terrible column name: it is a whole sentence,
+       * it gets reworded between runs, and a spreadsheet truncates it on sight.
+       * What stays put is how it is numbered, so a prefix of "1)" claims
+       * "1) How would you rate the overall quality of the workshop?" and goes on
+       * matching it after somebody rewrites the wording.
+       *
+       * Tried only after every exact match has been made, so a precise heading
+       * can never lose its column to a prefix.
+       */
+      matchPrefix?: string[];
+    };
 
-function expectationFor(entry: ExpectedColumn): { field: string; aliases: string[] } {
-  if (typeof entry === 'string') return { field: entry, aliases: [entry] };
-  return { field: entry.field, aliases: entry.label ? [entry.field, entry.label] : [entry.field] };
+interface Expectation {
+  field: string;
+  aliases: string[];
+  prefixes: string[];
+}
+
+function expectationFor(entry: ExpectedColumn): Expectation {
+  if (typeof entry === 'string') return { field: entry, aliases: [entry], prefixes: [] };
+
+  return {
+    field: entry.field,
+    aliases: [entry.field, ...(entry.label ? [entry.label] : []), ...(entry.aliases ?? [])],
+    prefixes: entry.matchPrefix ?? [],
+  };
 }
 
 export function parseCsv(input: string, expected: ExpectedColumn[]): ParsedCsv {
@@ -177,6 +213,29 @@ export function parseGrid(raw: string[][], expected: ExpectedColumn[]): ParsedCs
       const index = normalised.indexOf(normaliseHeader(alias));
       if (index !== -1) {
         columnFor.set(field, index);
+        break;
+      }
+    }
+  }
+
+  // Second pass, for fields no heading matched outright. A prefix is a weaker
+  // claim than a name, so it only ever picks up a column nothing else took —
+  // and it takes the first such column, because two questions numbered "1)"
+  // is a broken file, not an ambiguity worth guessing at.
+  const taken = new Set(columnFor.values());
+  for (const { field, prefixes } of wanted) {
+    if (columnFor.has(field) || prefixes.length === 0) continue;
+
+    for (const prefix of prefixes) {
+      const key = normaliseHeader(prefix);
+      if (key === '') continue;
+
+      const index = normalised.findIndex(
+        (header, at) => !taken.has(at) && header.startsWith(key),
+      );
+      if (index !== -1) {
+        columnFor.set(field, index);
+        taken.add(index);
         break;
       }
     }

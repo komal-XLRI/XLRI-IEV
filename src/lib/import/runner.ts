@@ -1,7 +1,8 @@
 import 'server-only';
 import { ZodError } from 'zod';
+import { ValidationError } from '@/lib/errors';
 import { normaliseHeader, parseCsv, parseGrid } from './parseCsv';
-import type { ImportOutcome, ImportRowResult, ImportSpec } from './types';
+import type { ImportContext, ImportOutcome, ImportRowResult, ImportSpec } from './types';
 
 export const MAX_IMPORT_ROWS = 2_000;
 
@@ -23,12 +24,22 @@ export async function runImport<Parsed>(
    * imported row must mean the same thing whichever file it came out of.
    */
   source: string | string[][],
-  options: { dryRun: boolean },
+  options: { dryRun: boolean; context?: ImportContext },
 ): Promise<ImportOutcome> {
+  // Optional so the specs that read nothing but their own columns — which is
+  // most of them — are called the way they always were. A spec that does need
+  // context validates it like any other input, so an empty one fails its rows
+  // with a message rather than writing something half-addressed.
+  const context: ImportContext = options.context ?? { actorId: '', params: {} };
   // Labels ride along with the field names: the heading a person writes is the
   // label ("Funding"), not the field ("fundingStatus"), and matching only the
   // latter dropped those columns without a word.
-  const fields = spec.columns.map((column) => ({ field: column.field, label: column.label }));
+  const fields = spec.columns.map((column) => ({
+    field: column.field,
+    label: column.label,
+    aliases: column.aliases,
+    matchPrefix: column.matchPrefix,
+  }));
   const { headers, rows, lineNumbers } =
     typeof source === 'string' ? parseCsv(source, fields) : parseGrid(source, fields);
 
@@ -122,24 +133,34 @@ export async function runImport<Parsed>(
         if (!result) continue;
 
         try {
-          const plan = await spec.preview(entry.value);
+          const plan = await spec.preview(entry.value, context);
           if (plan?.action !== 'updated') continue;
 
           plannedUpdates += 1;
           result.notes.push(plan.note ?? 'Will replace an existing record');
-        } catch {
-          // A preview is a courtesy: if the lookup fails, the commit pass will
-          // report the real problem against the row rather than the file.
+        } catch (error) {
+          // A preview that cannot answer is a courtesy lost, and the commit
+          // pass will report the real problem against the row. But a spec that
+          // says outright that this row is unwritable — a roll number matching
+          // no student, say — is reporting the very thing the preview exists
+          // to find, and swallowing it would let somebody confirm an import
+          // that was never going to write those rows.
+          if (error instanceof ValidationError) {
+            result.status = 'error';
+            result.errors.push(error.message);
+          }
         }
       }
     }
+
+    const stillValid = results.filter((result) => result.status === 'ok').length;
 
     return {
       datasetKey: spec.key,
       dryRun: true,
       totalRows: rows.length,
-      validRows: validEntries.length,
-      invalidRows,
+      validRows: stillValid,
+      invalidRows: rows.length - stillValid,
       createdRows: 0,
       updatedRows: plannedUpdates,
       failedRows: 0,
@@ -160,7 +181,7 @@ export async function runImport<Parsed>(
     try {
       // A spec that only ever creates returns nothing, so undefined reads as
       // 'created' rather than forcing five create-only specs to say so.
-      const action = (await spec.commit(entry.value)) ?? 'created';
+      const action = (await spec.commit(entry.value, context)) ?? 'created';
 
       if (action === 'updated') {
         result.status = 'updated';

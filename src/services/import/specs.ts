@@ -19,7 +19,12 @@ import {
 } from '@/services/ventures/studentVentureService';
 import { VENTURE_STATUSES } from '@/lib/constants/status';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/errors';
-import type { ImportSpec } from '@/lib/import/types';
+import {
+  assertWorkshopExists,
+  previewWorkshopFeedback,
+  saveWorkshopFeedback,
+} from '@/services/workshops/workshopFeedbackService';
+import type { ImportContext, ImportSpec } from '@/lib/import/types';
 
 /**
  * Import definitions.
@@ -660,6 +665,208 @@ export const ventureImport: ImportSpec<VentureImportRow> = {
   },
 };
 
+// -------------------------------------------------- Workshop feedback ----
+
+/**
+ * A timestamp as a feedback export writes it.
+ *
+ * Google Sheets exports `8/24/2026 15:38:27` to CSV and hands the same cell to
+ * a workbook reader as a real date, which arrives here as `2026-08-24`. Both
+ * are accepted, month-first, because that is what the export produces — this
+ * is not a date an administrator typed, so there is no ambiguity to resolve by
+ * asking. Anything unrecognisable is dropped rather than failing the row: when
+ * somebody said what they thought matters far less than what they said.
+ */
+function feedbackTimestamp(value: string): Date | null {
+  const text = value.trim();
+  if (text === '') return null;
+
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  if (iso) {
+    return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
+  }
+
+  const slashed =
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(text);
+
+  if (slashed) {
+    return new Date(
+      Date.UTC(
+        Number(slashed[3]),
+        Number(slashed[1]) - 1,
+        Number(slashed[2]),
+        Number(slashed[4] ?? 0),
+        Number(slashed[5] ?? 0),
+        Number(slashed[6] ?? 0),
+      ),
+    );
+  }
+
+  return null;
+}
+
+/**
+ * A 1-5 answer.
+ *
+ * Blank is allowed for every question but the first: a scale question can be
+ * made optional on the form, and a response that skipped one is still a
+ * response worth keeping.
+ */
+const ratingField = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value === '' || value === undefined ? null : Number(value)))
+  .refine(
+    (value) => value === null || (Number.isInteger(value) && value >= 1 && value <= 5),
+    'Ratings are whole numbers from 1 to 5',
+  );
+
+const workshopFeedbackRow = z.object({
+  submittedAt: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => feedbackTimestamp(value ?? '')),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .optional()
+    .transform((value) => (value === '' ? undefined : value)),
+  name: optional(200),
+  rollNumber: trimmed(40).min(1, 'Roll number is required'),
+  overallRating: z
+    .string()
+    .trim()
+    .min(1, 'An overall rating is required')
+    .transform((value) => Number(value))
+    .refine(
+      (value) => Number.isInteger(value) && value >= 1 && value <= 5,
+      'Ratings are whole numbers from 1 to 5',
+    ),
+  understandingRating: ratingField,
+  speakerRating: ratingField,
+  relevanceRating: ratingField,
+  takeaway: optional(4000),
+});
+
+/** The workshop an import was started for — taken from the page, never the file. */
+function feedbackWorkshopId(context: ImportContext): string {
+  const workshopId = context.params.workshopId ?? '';
+
+  if (!/^[a-f\d]{24}$/i.test(workshopId)) {
+    throw new ValidationError(
+      'Start this import from a workshop, so the responses have something to belong to.',
+    );
+  }
+
+  return workshopId;
+}
+
+/**
+ * Feedback responses for one workshop.
+ *
+ * The file is a feedback form export and nothing about it was designed for
+ * this system: the headings are the questions students were asked, written out
+ * in full, and there is no column saying which workshop it is — whoever
+ * exported it knew. So the scale questions are matched by their numbering, and
+ * the workshop comes from the page the import was started on.
+ */
+export const workshopFeedbackImport: ImportSpec<z.infer<typeof workshopFeedbackRow>> = {
+  key: 'workshop-feedback',
+  title: 'Import workshop feedback',
+  description:
+    'The feedback form export for this workshop. Responses are matched to students by roll number, and importing the same sheet twice replaces them rather than counting them twice.',
+  roles: ['ADMIN'],
+  columns: [
+    {
+      field: 'submittedAt',
+      label: 'Timestamp',
+      required: false,
+      example: '8/24/2026 15:38:27',
+      hint: 'The form writes this itself. Leave it as it is.',
+    },
+    {
+      field: 'email',
+      label: 'Email Address',
+      required: false,
+      aliases: ['Email', 'Email address'],
+      hint: 'Only consulted when the roll number matches nobody.',
+      example: 'v26001@astra.xlri.ac.in',
+    },
+    { field: 'name', label: 'Name', required: false, example: 'Ankita Mahajani' },
+    {
+      field: 'rollNumber',
+      label: 'Roll No.',
+      required: true,
+      aliases: ['Roll Number', 'Roll No', 'Roll'],
+      example: 'V26001',
+      hint: 'How a response is matched to a student. A roll number nobody has fails that row.',
+    },
+    {
+      field: 'overallRating',
+      label: '1) Overall quality of the workshop',
+      required: true,
+      matchPrefix: ['1)', '1.'],
+      example: '4',
+      hint: '1 to 5. Claimed by the leading "1)", whatever the question itself says.',
+    },
+    {
+      field: 'understandingRating',
+      label: '2) How well it helped you understand the topic',
+      required: false,
+      matchPrefix: ['2)', '2.'],
+      example: '4',
+      hint: '1 to 5.',
+    },
+    {
+      field: 'speakerRating',
+      label: '3) The speaker knowledge and delivery',
+      required: false,
+      matchPrefix: ['3)', '3.'],
+      example: '5',
+      hint: '1 to 5.',
+    },
+    {
+      field: 'relevanceRating',
+      label: '4) Relevance of the insights shared',
+      required: false,
+      matchPrefix: ['4)', '4.'],
+      example: '4',
+      hint: '1 to 5.',
+    },
+    {
+      field: 'takeaway',
+      label: '5) Key takeaway from the session',
+      required: false,
+      matchPrefix: ['5)', '5.'],
+      example: 'Learned how important it is to position the brand correctly.',
+    },
+  ],
+  schema: workshopFeedbackRow,
+  validateBatch: duplicateBy<z.infer<typeof workshopFeedbackRow>>(
+    (row) => row.rollNumber,
+    'roll number',
+  ),
+  preview: async (row, context) => {
+    const workshopId = feedbackWorkshopId(context);
+    await assertWorkshopExists(workshopId);
+
+    const action = await previewWorkshopFeedback(workshopId, row);
+
+    return action === 'updated'
+      ? { action, note: 'This student already has feedback here — it will be replaced' }
+      : { action };
+  },
+  commit: async (row, context) => {
+    const workshopId = feedbackWorkshopId(context);
+    await assertWorkshopExists(workshopId);
+
+    return saveWorkshopFeedback(workshopId, row, context.actorId);
+  },
+};
+
 // ------------------------------------------------------------ Registry ----
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- heterogeneous by design; each spec is internally typed.
@@ -670,6 +877,7 @@ const SPECS: Record<string, ImportSpec<any>> = {
   [subjectImport.key]: subjectImport,
   [ventureActivityImport.key]: ventureActivityImport,
   [ventureImport.key]: ventureImport,
+  [workshopFeedbackImport.key]: workshopFeedbackImport,
 };
 
 export const IMPORT_KEYS = Object.keys(SPECS);
