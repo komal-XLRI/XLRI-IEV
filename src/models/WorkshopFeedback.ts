@@ -10,7 +10,7 @@ import { registerModel } from './registerModel';
  * It keys on `{ workshopId, studentId }` and re-importing replaces rather than
  * appends. A form is exported more than once — once while responses are still
  * coming in, once when they have stopped — and an import that stacked three
- * copies of the same response would quietly double every average on the page.
+ * copies of the same response would list the same student three times.
  *
  * It keeps `submittedName`, `submittedEmail` and `submittedRollNumber` exactly
  * as the file gave them, alongside the `studentId` they were matched to. The
@@ -18,10 +18,10 @@ import { registerModel } from './registerModel';
  * what they actually wrote is what lets somebody check a match that looks
  * wrong. Display uses the account, not these.
  *
- * The four ratings are the form's four scale questions, 1 to 5. They are
- * stored as named fields rather than an array of answers because the page
- * shows them individually — "speaker" and "relevance" are different questions
- * and averaging them together would say nothing.
+ * The four ratings are the form's four scale questions, 1 to 5. Every one of
+ * them is optional, and none is displayed: the programme office asked for the
+ * responses, not a score. They are kept because the form collects them and
+ * throwing away an answer a student gave would be the harder thing to undo.
  */
 export interface IWorkshopFeedback {
   _id: Types.ObjectId;
@@ -38,7 +38,7 @@ export interface IWorkshopFeedback {
   submittedRollNumber?: string;
 
   /** Overall quality of the workshop, 1–5. */
-  overallRating: number;
+  overallRating?: number | null;
   /** How well the session helped them understand the topic, 1–5. */
   understandingRating?: number | null;
   /** The speaker's knowledge and delivery, 1–5. */
@@ -76,7 +76,7 @@ const workshopFeedbackSchema = new Schema<IWorkshopFeedback>(
     submittedEmail: { type: String, trim: true, lowercase: true, maxlength: 200 },
     submittedRollNumber: { type: String, trim: true, uppercase: true, maxlength: 40 },
 
-    overallRating: { type: Number, required: true, min: 1, max: 5 },
+    overallRating: rating,
     understandingRating: rating,
     speakerRating: rating,
     relevanceRating: rating,

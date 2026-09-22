@@ -15,16 +15,6 @@ import { exactPattern } from '@/lib/utils/regex';
  * student submitted.
  */
 
-/** The four scale questions, in the order the form asks them. */
-export const FEEDBACK_QUESTIONS = [
-  { field: 'overallRating', label: 'Overall quality', number: 1 },
-  { field: 'understandingRating', label: 'Helped me understand', number: 2 },
-  { field: 'speakerRating', label: "Speaker's knowledge", number: 3 },
-  { field: 'relevanceRating', label: 'Relevance', number: 4 },
-] as const;
-
-export type FeedbackRatingField = (typeof FEEDBACK_QUESTIONS)[number]['field'];
-
 export interface WorkshopFeedbackRow {
   _id: string;
   studentId: string;
@@ -33,28 +23,22 @@ export interface WorkshopFeedbackRow {
   batch: string;
   email: string;
   submittedAt: string | null;
-  overallRating: number;
+  /**
+   * Kept on the record because the form asks for them, but nothing displays or
+   * averages them: the office wanted what students wrote, not a score.
+   */
+  overallRating: number | null;
   understandingRating: number | null;
   speakerRating: number | null;
   relevanceRating: number | null;
   takeaway: string;
-  /**
-   * Set when the roll number in the file belongs to somebody other than the
-   * account it was matched to — which should be impossible, and is shown
-   * rather than hidden precisely because of that.
-   */
+  /** What the file gave as the roll number, before it was matched.  */
   submittedRollNumber: string;
 }
 
 export interface WorkshopFeedbackSummary {
   /** How many students responded. */
   responses: number;
-  /** Active students on the programme, for a response rate. */
-  cohort: number;
-  /** Mean of each question, to one decimal place. Null when unanswered. */
-  averages: Record<FeedbackRatingField, number | null>;
-  /** Count of each 1–5 answer to the overall question, for the distribution bar. */
-  distribution: Record<1 | 2 | 3 | 4 | 5, number>;
   /** How many wrote something in the free-text box. */
   written: number;
 }
@@ -62,11 +46,6 @@ export interface WorkshopFeedbackSummary {
 export interface WorkshopFeedbackView {
   summary: WorkshopFeedbackSummary;
   rows: WorkshopFeedbackRow[];
-}
-
-function mean(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return Math.round((values.reduce((total, value) => total + value, 0) / values.length) * 10) / 10;
 }
 
 /**
@@ -79,17 +58,14 @@ function mean(values: number[]): number | null {
 export async function getWorkshopFeedback(workshopId: string): Promise<WorkshopFeedbackView> {
   await connectToDatabase();
 
-  const [feedback, cohort] = await Promise.all([
-    WorkshopFeedback.find({ workshopId })
-      .populate<{ studentId: { _id: unknown; name: string; email: string } | null }>(
-        'studentId',
-        'name email',
-      )
-      .sort({ submittedAt: 1, createdAt: 1 })
-      .lean()
-      .exec(),
-    User.countDocuments({ role: 'STUDENT', status: 'ACTIVE' }),
-  ]);
+  const feedback = await WorkshopFeedback.find({ workshopId })
+    .populate<{ studentId: { _id: unknown; name: string; email: string } | null }>(
+      'studentId',
+      'name email',
+    )
+    .sort({ submittedAt: 1, createdAt: 1 })
+    .lean()
+    .exec();
 
   const studentIds = feedback
     .map((entry) => (entry.studentId?._id ? String(entry.studentId._id) : ''))
@@ -117,7 +93,7 @@ export async function getWorkshopFeedback(workshopId: string): Promise<WorkshopF
       batch: profile?.batch ?? '',
       email: student?.email ?? entry.submittedEmail ?? '',
       submittedAt: entry.submittedAt ? entry.submittedAt.toISOString() : null,
-      overallRating: entry.overallRating,
+      overallRating: entry.overallRating ?? null,
       understandingRating: entry.understandingRating ?? null,
       speakerRating: entry.speakerRating ?? null,
       relevanceRating: entry.relevanceRating ?? null,
@@ -126,29 +102,9 @@ export async function getWorkshopFeedback(workshopId: string): Promise<WorkshopF
     };
   });
 
-  const distribution: Record<1 | 2 | 3 | 4 | 5, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  for (const row of rows) {
-    const score = row.overallRating;
-    if (score >= 1 && score <= 5) distribution[score as 1 | 2 | 3 | 4 | 5] += 1;
-  }
-
-  const averages = Object.fromEntries(
-    FEEDBACK_QUESTIONS.map((question) => [
-      question.field,
-      mean(
-        rows
-          .map((row) => row[question.field])
-          .filter((value): value is number => typeof value === 'number'),
-      ),
-    ]),
-  ) as Record<FeedbackRatingField, number | null>;
-
   return {
     summary: {
       responses: rows.length,
-      cohort,
-      averages,
-      distribution,
       written: rows.filter((row) => row.takeaway.trim() !== '').length,
     },
     rows,
@@ -173,7 +129,7 @@ export interface FeedbackImportRow {
   email?: string;
   name?: string;
   submittedAt?: Date | null;
-  overallRating: number;
+  overallRating?: number | null;
   understandingRating?: number | null;
   speakerRating?: number | null;
   relevanceRating?: number | null;
@@ -264,7 +220,7 @@ export async function saveWorkshopFeedback(
         submittedName: row.name,
         submittedEmail: row.email,
         submittedRollNumber: row.rollNumber,
-        overallRating: row.overallRating,
+        overallRating: row.overallRating ?? null,
         understandingRating: row.understandingRating ?? null,
         speakerRating: row.speakerRating ?? null,
         relevanceRating: row.relevanceRating ?? null,
