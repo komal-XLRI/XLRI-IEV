@@ -31,6 +31,8 @@ import {
   workshopAttendanceDataset,
 } from './datasets/records';
 
+import { workshopFeedbackDataset } from './datasets/workshopFeedback';
+
 import {
   myProgressDataset,
   myReviewQueueDataset,
@@ -66,6 +68,7 @@ const DATASETS: Record<string, DatasetDefinition<any>> = {
   [ventureAttendanceDataset.key]: ventureAttendanceDataset,
   [ventureAttendanceConsolidatedDataset.key]: ventureAttendanceConsolidatedDataset,
   [workshopAttendanceDataset.key]: workshopAttendanceDataset,
+  [workshopFeedbackDataset.key]: workshopFeedbackDataset,
   [subjectsDataset.key]: subjectsDataset,
   [sessionsDataset.key]: sessionsDataset,
   [termsDataset.key]: termsDataset,

@@ -4,21 +4,24 @@ import { DataTable, type DataColumn } from '@/components/ui/DataTable';
 import { textCell } from '@/components/ui/dataTableModel';
 import { cn } from '@/lib/utils/cn';
 import { formatDate } from '@/lib/utils/dates';
-import type { WorkshopFeedbackView } from '@/services/workshops/workshopFeedbackService';
+import type {
+  QuestionStat,
+  WorkshopFeedbackView,
+} from '@/services/workshops/workshopFeedbackService';
 import type { ReactNode } from 'react';
 
 /**
  * What students said about one workshop.
  *
- * Every answer each student gave — all four ratings and their comment — and
- * nothing derived from them. There are deliberately no averages here: this
- * page had them, and the programme office did not want a workshop reduced to
- * a number. A rating means something as one student's answer; the mean of
- * twelve of them was answering a question nobody asked.
+ * Three readings of the same responses, in the order somebody asks for them:
+ * how each question scored, what every student answered, and what they wrote.
  *
- * So the ratings are shown per person, in the row belonging to the person who
- * gave them, and the comments are repeated in full underneath where they can
- * actually be read.
+ * Every average is per question and is shown beside that question's own
+ * spread. A 3.4 made of fives and ones is a different workshop from a 3.4 made
+ * of threes, and an average printed on its own cannot tell those apart — which
+ * is the whole reason the counts sit next to it rather than behind a click.
+ * Nothing is ever averaged *across* questions: "the speaker" and "relevance"
+ * are different things and one number covering both would say nothing.
  */
 
 /**
@@ -40,6 +43,71 @@ const RATINGS = [
 /** Strips the leading "3)" so the number is not printed twice. */
 function questionText(raw: string): string {
   return raw.replace(/^\s*\d+\s*[).:-]\s*/, '').trim();
+}
+
+/**
+ * One question: what it asked, how it averaged, and how the answers fell.
+ *
+ * The spread is five rows of counts rather than a chart. The counts are what
+ * somebody reads out in a meeting — "four people gave it a one" — and a chart
+ * would make that number the thing you have to hover to find out.
+ */
+function QuestionCard({ stat }: { stat: QuestionStat }) {
+  return (
+    <div className="surface-sunken rounded-card p-3.5">
+      <div className="flex items-start justify-between gap-3">
+        <p className="type-body min-w-0">
+          <span className="text-muted-foreground mr-1.5 tabular-nums">Q{stat.number}.</span>
+          {stat.question ? questionText(stat.question) : stat.label}
+        </p>
+
+        <span className="shrink-0 text-right">
+          <span
+            className={cn(
+              'block text-xl leading-none font-semibold tabular-nums',
+              stat.average === null
+                ? 'text-muted-foreground'
+                : stat.average >= 4
+                  ? 'text-success'
+                  : stat.average >= 3
+                    ? 'text-warning'
+                    : 'text-danger',
+            )}
+          >
+            {stat.average === null ? '—' : stat.average.toFixed(1)}
+          </span>
+          <span className="type-caption">of 5</span>
+        </span>
+      </div>
+
+      <div className="mt-3 space-y-1">
+        {([5, 4, 3, 2, 1] as const).map((score) => {
+          const count = stat.distribution[score];
+          const percent = stat.answered === 0 ? 0 : (count / stat.answered) * 100;
+
+          return (
+            <div key={score} className="flex items-center gap-2">
+              <span className="type-caption w-3 shrink-0 text-right tabular-nums">{score}</span>
+              <span className="bg-surface h-2 min-w-0 flex-1 overflow-hidden rounded-full">
+                <span
+                  className={cn(
+                    'block h-full rounded-full',
+                    score >= 4 ? 'bg-success' : score === 3 ? 'bg-warning' : 'bg-danger',
+                  )}
+                  style={{ width: `${percent}%` }}
+                />
+              </span>
+              <span className="type-caption w-6 shrink-0 tabular-nums">{count}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="type-caption mt-2.5">
+        {stat.answered} answer{stat.answered === 1 ? '' : 's'}
+      </p>
+    </div>
+  );
 }
 
 /** One student's answer to one question. */
@@ -71,20 +139,7 @@ export function WorkshopFeedbackPanel({
   action?: ReactNode;
 }) {
   const { summary, rows } = feedback;
-  const { questions } = summary;
-
-  // Only what this form actually asked. A sheet with no rating columns leaves
-  // this empty, and the block does not appear at all.
-  const asked = [
-    ...RATINGS.map((rating) => ({
-      number: rating.number,
-      label: rating.header,
-      text: questions[rating.question],
-    })),
-    { number: 5, label: 'Feedback', text: questions.takeaway },
-  ].filter((entry): entry is { number: number; label: string; text: string } =>
-    Boolean(entry.text),
-  );
+  const { questions, stats } = summary;
 
   const columns: DataColumn[] = [
     { key: 'student', header: 'Student' },
@@ -112,28 +167,24 @@ export function WorkshopFeedbackPanel({
         action={action}
       />
 
-      {asked.length > 0 ? (
+      {stats.length > 0 ? (
         <CardBody className="border-b">
-          <p className="type-overline mb-3">Questions asked on this form</p>
+          <p className="type-overline mb-3">How each question scored</p>
 
-          <ol className="space-y-2">
-            {asked.map((entry) => (
-              <li key={entry.number} className="flex gap-2.5">
-                <span className="type-caption w-4 shrink-0 pt-0.5 text-right tabular-nums">
-                  {entry.number}.
-                </span>
-                <span className="min-w-0">
-                  <span className="type-body">{questionText(entry.text)}</span>{' '}
-                  <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap">
-                    {entry.label}
-                  </span>
-                </span>
-              </li>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {stats.map((stat) => (
+              <QuestionCard key={stat.key} stat={stat} />
             ))}
-          </ol>
+          </div>
+        </CardBody>
+      ) : null}
 
-          <p className="type-caption mt-3">
-            The short labels are how these questions are headed in the table below.
+      {questions.takeaway ? (
+        <CardBody className="border-b">
+          <p className="type-overline mb-2">Question 5, written answers</p>
+          <p className="type-body">{questionText(questions.takeaway)}</p>
+          <p className="type-caption mt-1">
+            {summary.written} of {summary.responses} answered this one.
           </p>
         </CardBody>
       ) : null}

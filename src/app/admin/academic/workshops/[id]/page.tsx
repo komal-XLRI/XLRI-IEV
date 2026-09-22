@@ -26,6 +26,7 @@ import { getWorkshopFeedback } from '@/services/workshops/workshopFeedbackServic
 import { workshopFeedbackImport } from '@/services/import/specs';
 import { WorkshopFeedbackPanel } from '@/components/admin/WorkshopFeedbackPanel';
 import { WorkshopFeedbackImport } from '@/components/admin/WorkshopFeedbackImport';
+import { ExportMenu } from '@/components/export/ExportMenu';
 import { countEmailRecipients } from '@/services/workshops/workshopEmailService';
 import { formatDate, formatDateTime, toDateInputValue } from '@/lib/utils/dates';
 import { isValidObjectId } from '@/lib/utils/ids';
@@ -123,13 +124,18 @@ export default async function WorkshopDetailPage({ params }: { params: Promise<{
         <WorkshopFeedbackPanel
           feedback={feedback}
           action={
-            <WorkshopFeedbackImport
-              spec={workshopFeedbackImport.key}
-              title={workshopFeedbackImport.title}
-              description={workshopFeedbackImport.description}
-              columns={workshopFeedbackImport.columns}
-              workshopId={id}
-            />
+            <span className="flex flex-wrap items-center gap-2">
+              {/* Scoped to this workshop, so the file is this workshop's
+                  responses and its own averages — not the programme's. */}
+              <ExportMenu dataset="workshop-feedback" extraParams={{ workshopId: id }} />
+              <WorkshopFeedbackImport
+                spec={workshopFeedbackImport.key}
+                title={workshopFeedbackImport.title}
+                description={workshopFeedbackImport.description}
+                columns={workshopFeedbackImport.columns}
+                workshopId={id}
+              />
+            </span>
           }
         />
       </div>
