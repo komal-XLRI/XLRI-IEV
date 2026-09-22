@@ -856,7 +856,24 @@ export const workshopFeedbackImport: ImportSpec<z.infer<typeof workshopFeedbackR
     const workshopId = feedbackWorkshopId(context);
     await assertWorkshopExists(workshopId);
 
-    return saveWorkshopFeedback(workshopId, row, context.actorId);
+    // The headings of this file are the questions these students answered, so
+    // they are stored with the answers rather than thrown away with the file.
+    const headings = context.headings ?? {};
+
+    return saveWorkshopFeedback(
+      workshopId,
+      {
+        ...row,
+        questions: {
+          overall: headings.overallRating,
+          understanding: headings.understandingRating,
+          speaker: headings.speakerRating,
+          relevance: headings.relevanceRating,
+          takeaway: headings.takeaway,
+        },
+      },
+      context.actorId,
+    );
   },
 };
 

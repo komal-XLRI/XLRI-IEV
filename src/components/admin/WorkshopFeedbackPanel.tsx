@@ -21,13 +21,26 @@ import type { ReactNode } from 'react';
  * actually be read.
  */
 
-/** The four scale questions, as the table heads them. */
+/**
+ * The four scale questions.
+ *
+ * `header` is a short stand-in for the table, where the real question — two
+ * lines of it, with the scale spelled out in brackets — would make the column
+ * unreadable. The real wording is shown in full above the table, numbered to
+ * match, and comes from the imported file rather than from here: every
+ * workshop's form asks about that workshop.
+ */
 const RATINGS = [
-  { field: 'overallRating', header: 'Overall' },
-  { field: 'understandingRating', header: 'Understood' },
-  { field: 'speakerRating', header: 'Speaker' },
-  { field: 'relevanceRating', header: 'Relevance' },
+  { field: 'overallRating', question: 'overall', header: 'Overall', number: 1 },
+  { field: 'understandingRating', question: 'understanding', header: 'Understood', number: 2 },
+  { field: 'speakerRating', question: 'speaker', header: 'Speaker', number: 3 },
+  { field: 'relevanceRating', question: 'relevance', header: 'Relevance', number: 4 },
 ] as const;
+
+/** Strips the leading "3)" so the number is not printed twice. */
+function questionText(raw: string): string {
+  return raw.replace(/^\s*\d+\s*[).:-]\s*/, '').trim();
+}
 
 /** One student's answer to one question. */
 function Score({ value }: { value: number | null }) {
@@ -58,6 +71,20 @@ export function WorkshopFeedbackPanel({
   action?: ReactNode;
 }) {
   const { summary, rows } = feedback;
+  const { questions } = summary;
+
+  // Only what this form actually asked. A sheet with no rating columns leaves
+  // this empty, and the block does not appear at all.
+  const asked = [
+    ...RATINGS.map((rating) => ({
+      number: rating.number,
+      label: rating.header,
+      text: questions[rating.question],
+    })),
+    { number: 5, label: 'Feedback', text: questions.takeaway },
+  ].filter((entry): entry is { number: number; label: string; text: string } =>
+    Boolean(entry.text),
+  );
 
   const columns: DataColumn[] = [
     { key: 'student', header: 'Student' },
@@ -84,6 +111,32 @@ export function WorkshopFeedbackPanel({
         icon={MessageSquareQuote}
         action={action}
       />
+
+      {asked.length > 0 ? (
+        <CardBody className="border-b">
+          <p className="type-overline mb-3">Questions asked on this form</p>
+
+          <ol className="space-y-2">
+            {asked.map((entry) => (
+              <li key={entry.number} className="flex gap-2.5">
+                <span className="type-caption w-4 shrink-0 pt-0.5 text-right tabular-nums">
+                  {entry.number}.
+                </span>
+                <span className="min-w-0">
+                  <span className="type-body">{questionText(entry.text)}</span>{' '}
+                  <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap">
+                    {entry.label}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ol>
+
+          <p className="type-caption mt-3">
+            The short labels are how these questions are headed in the table below.
+          </p>
+        </CardBody>
+      ) : null}
 
       <DataTable
         caption="Student feedback"

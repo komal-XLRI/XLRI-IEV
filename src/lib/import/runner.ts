@@ -26,11 +26,6 @@ export async function runImport<Parsed>(
   source: string | string[][],
   options: { dryRun: boolean; context?: ImportContext },
 ): Promise<ImportOutcome> {
-  // Optional so the specs that read nothing but their own columns — which is
-  // most of them — are called the way they always were. A spec that does need
-  // context validates it like any other input, so an empty one fails its rows
-  // with a message rather than writing something half-addressed.
-  const context: ImportContext = options.context ?? { actorId: '', params: {} };
   // Labels ride along with the field names: the heading a person writes is the
   // label ("Funding"), not the field ("fundingStatus"), and matching only the
   // latter dropped those columns without a word.
@@ -40,8 +35,21 @@ export async function runImport<Parsed>(
     aliases: column.aliases,
     matchPrefix: column.matchPrefix,
   }));
-  const { headers, rows, lineNumbers } =
+  const { headers, matched, rows, lineNumbers } =
     typeof source === 'string' ? parseCsv(source, fields) : parseGrid(source, fields);
+
+  // Context is optional so the specs that read nothing but their own columns —
+  // most of them — are called the way they always were. A spec that does need
+  // it validates it like any other input, so an empty one fails its rows with a
+  // message rather than writing something half-addressed.
+  const context: ImportContext = {
+    actorId: '',
+    params: {},
+    ...(options.context ?? {}),
+    // Taken from the file just parsed, never from the caller: the headings
+    // belong to this read and nothing else could know them.
+    headings: matched,
+  };
 
   const fileErrors: string[] = [];
 

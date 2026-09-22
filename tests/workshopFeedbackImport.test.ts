@@ -93,6 +93,40 @@ describe('a feedback export header', () => {
   });
 });
 
+describe('the questions a form asked', () => {
+  it('keeps each heading whole, scale note and all, against the field it fed', () => {
+    const { matched } = parseGrid([HEADERS, ROW], columns);
+
+    expect(matched.overallRating).toBe(HEADERS[4]);
+    expect(matched.understandingRating).toBe(HEADERS[5]);
+    expect(matched.speakerRating).toBe(HEADERS[6]);
+    expect(matched.relevanceRating).toBe(HEADERS[7]);
+    expect(matched.takeaway).toBe(HEADERS[8]);
+  });
+
+  it('reports the wording of the file in hand, not the template it was matched by', () => {
+    // The point of storing these: one workshop's form asks about that
+    // workshop, and the answers mean nothing without the question.
+    const ipLaw = [...HEADERS];
+    ipLaw[5] =
+      '2) How effectively did the session help you understand the key aspects and challenges of IP Law and IP Strategy? (5 being the highest and 1 being the lowest)';
+
+    const { matched } = parseGrid([ipLaw, ROW], columns);
+
+    expect(matched.understandingRating).toBe(ipLaw[5]);
+    expect(matched.understandingRating).toContain('IP Law');
+  });
+
+  it('names no question for a column the file does not have', () => {
+    const short = HEADERS.slice(0, 5);
+    const { matched } = parseGrid([short, ROW.slice(0, 5)], columns);
+
+    expect(matched.overallRating).toBe(HEADERS[4]);
+    expect(matched.speakerRating).toBeUndefined();
+    expect(matched.takeaway).toBeUndefined();
+  });
+});
+
 describe('a single response', () => {
   const parse = (values: string[]) =>
     workshopFeedbackImport.schema.safeParse(read([values])[0] ?? {});
