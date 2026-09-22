@@ -8,6 +8,33 @@ export interface ImportColumn {
   required: boolean;
   example: string;
   hint?: string;
+  /**
+   * Other headings this column answers to, matched exactly.
+   *
+   * For files this system did not provide the template for, where the heading
+   * is whatever the person who built the sheet happened to write.
+   */
+  aliases?: string[];
+  /**
+   * Headings this column claims by their opening words, tried only after every
+   * exact match has been made. See `ExpectedColumn` in the parser for why a
+   * survey question needs this.
+   */
+  matchPrefix?: string[];
+}
+
+/**
+ * What the run itself supplies, as opposed to what the file says.
+ *
+ * Some imports are about a record the file never names: a feedback sheet is one
+ * workshop's responses and carries no column saying which workshop, because the
+ * person exporting it already knew. That context comes from the page the import
+ * was started on, and `actorId` records who ran it.
+ */
+export interface ImportContext {
+  actorId: string;
+  /** Query parameters the import was started with, unvalidated. */
+  params: Record<string, string>;
 }
 
 export interface ImportSpec<Parsed> {
@@ -25,7 +52,7 @@ export interface ImportSpec<Parsed> {
    * 3 updated" rather than counting an overwrite as a creation. A spec that
    * only ever creates can return nothing.
    */
-  commit(row: Parsed): Promise<ImportAction | void>;
+  commit(row: Parsed, context: ImportContext): Promise<ImportAction | void>;
   /**
    * What committing this row would do, asked during a dry run.
    *
@@ -34,7 +61,7 @@ export interface ImportSpec<Parsed> {
    * able to say so *before* the write — a row that reads "ok" and then quietly
    * replaces a record makes the preview a lie by omission.
    */
-  preview?(row: Parsed): Promise<ImportPlan | null>;
+  preview?(row: Parsed, context: ImportContext): Promise<ImportPlan | null>;
   /** Optional extra guard across the whole file, e.g. duplicate detection. */
   validateBatch?(rows: Parsed[]): Array<{ index: number; message: string }>;
 }

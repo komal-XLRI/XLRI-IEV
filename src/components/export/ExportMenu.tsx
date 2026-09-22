@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Download, FileSpreadsheet, FileText, Loader2, Printer, Table2 } from 'lucide-react';
-import { cn } from '@/lib/utils/cn';
+import { AnchoredMenu } from '@/components/ui/AnchoredMenu';
 import { useToast } from '@/components/ui/Toast';
 import type { ExportFormat } from '@/lib/export/types';
 
@@ -57,7 +57,7 @@ export function ExportMenu({
   const { notify } = useToast();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<ExportFormat | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   // Close when the route changes, without an effect that sets state.
   const [lastPath, setLastPath] = useState(pathname);
@@ -65,24 +65,6 @@ export function ExportMenu({
     setLastPath(pathname);
     setOpen(false);
   }
-
-  useEffect(() => {
-    if (!open) return;
-
-    const onPointerDown = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
 
   function buildUrl(format: ExportFormat, raw = false): string {
     const params = new URLSearchParams(searchParams.toString());
@@ -144,8 +126,9 @@ export function ExportMenu({
   }
 
   return (
-    <div ref={containerRef} className="relative inline-block">
+    <div className="inline-block">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
         disabled={busy !== null}
@@ -161,14 +144,15 @@ export function ExportMenu({
         {busy ? 'Preparing…' : label}
       </button>
 
-      {open ? (
-        <div
-          role="menu"
-          className={cn(
-            'surface-overlay absolute z-30 mt-1 w-56 overflow-hidden rounded-lg',
-            align === 'right' ? 'right-0' : 'left-0',
-          )}
-        >
+      <AnchoredMenu
+        open={open}
+        anchorRef={triggerRef}
+        onClose={() => setOpen(false)}
+        align={align}
+        width={224}
+        label="Export options"
+      >
+        <div>
           <p className="text-muted-foreground border-b px-3 py-2 text-xs">
             Exports the current filters and sort order.
           </p>
@@ -206,7 +190,7 @@ export function ExportMenu({
             </button>
           ) : null}
         </div>
-      ) : null}
+      </AnchoredMenu>
     </div>
   );
 }

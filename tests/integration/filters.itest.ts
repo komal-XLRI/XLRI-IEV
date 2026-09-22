@@ -259,14 +259,20 @@ describe('imported students, and the page-vs-query regression', () => {
     // Names chosen to sort AFTER the rest of the fixture: the directory sorts
     // by name, so under the old code these fell outside the fetched page.
     for (const index of [1, 2, 3]) {
-      await studentImport.commit({
-        name: `Zzz Imported ${index}`,
-        email: `imported${index}.${SUFFIX}@example.test`,
-        rollNumber: `IMP${index}-${SUFFIX}`,
-        batch: IMPORTED,
-        cluster: undefined,
-        phone: undefined,
-      });
+      await studentImport.commit(
+        {
+          name: `Zzz Imported ${index}`,
+          email: `imported${index}.${SUFFIX}@example.test`,
+          rollNumber: `IMP${index}-${SUFFIX}`,
+          batch: IMPORTED,
+          cluster: undefined,
+          phone: undefined,
+        },
+        // Student rows are addressed entirely by their own columns; the
+        // context exists for imports that belong to a record the file never
+        // names, which this is not.
+        { actorId: '', params: {} },
+      );
     }
 
     const users = await models.User.find({ email: new RegExp(`imported\\d\\.${SUFFIX}`) })

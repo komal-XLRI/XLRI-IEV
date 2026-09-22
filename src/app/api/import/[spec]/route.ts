@@ -117,7 +117,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ sp
       dryRun = body?.dryRun !== false;
     }
 
-    const outcome = await runImport(spec, source, { dryRun });
+    // Everything the import was started with that is not a column. A spec
+    // reads only the keys it knows about, and validates them itself — this is
+    // a query string, so it is exactly as trustworthy as one.
+    const params: Record<string, string> = {};
+    request.nextUrl.searchParams.forEach((value, key) => {
+      if (key !== 'format') params[key] = value;
+    });
+
+    const outcome = await runImport(spec, source, {
+      dryRun,
+      context: { actorId: actor.userId, params },
+    });
 
     logger.info('Import run', {
       spec: key,
