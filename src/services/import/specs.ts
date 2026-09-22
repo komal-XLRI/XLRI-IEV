@@ -708,9 +708,10 @@ function feedbackTimestamp(value: string): Date | null {
 /**
  * A 1-5 answer.
  *
- * Blank is allowed for every question but the first: a scale question can be
- * made optional on the form, and a response that skipped one is still a
- * response worth keeping.
+ * Every scale question is optional, including the first. Nothing is scored or
+ * averaged from these, so a response that skipped one — or a sheet that has no
+ * rating columns at all — is still a response, and refusing it would lose the
+ * only part anybody reads.
  */
 const ratingField = z
   .string()
@@ -736,15 +737,7 @@ const workshopFeedbackRow = z.object({
     .transform((value) => (value === '' ? undefined : value)),
   name: optional(200),
   rollNumber: trimmed(40).min(1, 'Roll number is required'),
-  overallRating: z
-    .string()
-    .trim()
-    .min(1, 'An overall rating is required')
-    .transform((value) => Number(value))
-    .refine(
-      (value) => Number.isInteger(value) && value >= 1 && value <= 5,
-      'Ratings are whole numbers from 1 to 5',
-    ),
+  overallRating: ratingField,
   understandingRating: ratingField,
   speakerRating: ratingField,
   relevanceRating: ratingField,
@@ -777,7 +770,7 @@ export const workshopFeedbackImport: ImportSpec<z.infer<typeof workshopFeedbackR
   key: 'workshop-feedback',
   title: 'Import workshop feedback',
   description:
-    'The feedback form export for this workshop. Responses are matched to students by roll number, and importing the same sheet twice replaces them rather than counting them twice.',
+    'The feedback form export for this workshop. Responses are matched to students by roll number, and importing the same sheet twice replaces them rather than storing them twice.',
   roles: ['ADMIN'],
   columns: [
     {
@@ -807,10 +800,10 @@ export const workshopFeedbackImport: ImportSpec<z.infer<typeof workshopFeedbackR
     {
       field: 'overallRating',
       label: '1) Overall quality of the workshop',
-      required: true,
+      required: false,
       matchPrefix: ['1)', '1.'],
       example: '4',
-      hint: '1 to 5. Claimed by the leading "1)", whatever the question itself says.',
+      hint: 'Kept with the response, but never scored or averaged.',
     },
     {
       field: 'understandingRating',

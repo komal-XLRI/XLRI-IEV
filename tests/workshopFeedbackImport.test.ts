@@ -127,11 +127,15 @@ describe('a single response', () => {
     expect(result.data.relevanceRating).toBeNull();
   });
 
-  it('refuses a response with no overall rating, having nothing to average', () => {
-    const blank = [...ROW];
-    blank[4] = '';
+  it('keeps a response that rated nothing at all, which is still feedback', () => {
+    const unrated = [...ROW];
+    for (const column of [4, 5, 6, 7]) unrated[column] = '';
 
-    expect(parse(blank).success).toBe(false);
+    const result = parse(unrated);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.overallRating).toBeNull();
+    expect(result.data.takeaway).toBe('learned how important it is to do correct positioning');
   });
 
   it('refuses a rating outside the scale, whichever way it is wrong', () => {
