@@ -19,7 +19,6 @@ export async function getReviewQueueRows(
     activityCode: item.activity.activityCode,
     activityName: item.activity.name,
     attemptNumber: item.record.attemptNumber,
-    maxAttempts: item.activity.maxAttempts,
     myReviewStatus: item.myReviewStatus,
     otherReviewStatus: item.otherReviewStatus,
     updatedAt: item.record.updatedAt.toISOString(),

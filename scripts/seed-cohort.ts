@@ -6,8 +6,8 @@
  * `seed:demo` creates one student so every dashboard has something on it. This
  * creates a cohort with the variation the *controls* need: two batches and a
  * deactivated account for the directory filters, ventures with and without
- * reviewers for the ventures screen, activities in every review state for the
- * reviews queue and the admin dashboard, attendance in all three states for the
+ * reviewers for the ventures screen, received presentations for the venture
+ * activity checklist and the admin dashboard, attendance in all three states for the
  * roster, and workshops across every mode and status.
  *
  * Everything is written through the same services the UI calls, so a seeded
@@ -110,7 +110,8 @@ const MENTORS = [
   },
 ] as const;
 
-type VentureState = 'FRESH' | 'SUBMITTED' | 'HALF_REVIEWED' | 'COMPLETED' | 'REVISION' | 'NO_PAIR';
+/** PRESENTED: the first stage's presentation is in the Drive folder and ticked off. */
+type VentureState = 'FRESH' | 'PRESENTED' | 'NO_PAIR';
 
 const VENTURES: Array<{
   student: (typeof STUDENTS)[number]['handle'];
@@ -130,7 +131,7 @@ const VENTURES: Array<{
     status: 'ACTIVE',
     faculty: 'meera',
     mentor: 'ravi',
-    state: 'COMPLETED',
+    state: 'PRESENTED',
   },
   {
     student: 'bhavin',
@@ -140,7 +141,7 @@ const VENTURES: Array<{
     status: 'ACTIVE',
     faculty: 'meera',
     mentor: 'imran',
-    state: 'HALF_REVIEWED',
+    state: 'PRESENTED',
   },
   {
     student: 'chitra',
@@ -150,7 +151,7 @@ const VENTURES: Array<{
     status: 'ACTIVE',
     faculty: 'sanjay',
     mentor: 'priya',
-    state: 'SUBMITTED',
+    state: 'PRESENTED',
   },
   {
     student: 'devan',
@@ -160,7 +161,7 @@ const VENTURES: Array<{
     status: 'ACTIVE',
     faculty: 'sanjay',
     mentor: 'ravi',
-    state: 'REVISION',
+    state: 'PRESENTED',
   },
   {
     student: 'esha',
@@ -180,7 +181,7 @@ const VENTURES: Array<{
     status: 'ACTIVE',
     faculty: 'nandini',
     mentor: 'imran',
-    state: 'SUBMITTED',
+    state: 'PRESENTED',
   },
   {
     student: 'gita',
@@ -200,7 +201,7 @@ const VENTURES: Array<{
     status: 'COMPLETED',
     faculty: 'sanjay',
     mentor: 'ravi',
-    state: 'COMPLETED',
+    state: 'PRESENTED',
   },
   // Deliberately unpaired, so the "awaiting a reviewer" warning is non-zero.
   {
@@ -344,8 +345,8 @@ async function main() {
   const { createUser } = await import('../src/services/users/userService');
   const { createStudentVenture, bootstrapActivityRecords, getVentureProgress, assignReviewers } =
     await import('../src/services/ventures/studentVentureService');
-  const { createSubmission } = await import('../src/services/submissions/submissionService');
-  const { createReview } = await import('../src/services/reviews/reviewService');
+  const { setPresentationFolder, setPresentationsReceived } =
+    await import('../src/services/ventures/presentationService');
   const { saveAttendance } = await import('../src/services/ventures/attendanceService');
   const { createWorkshop } = await import('../src/services/workshops/workshopService');
 
@@ -487,100 +488,58 @@ async function main() {
 
   console.log(`  ${ventureIdByStudent.size} ventures`);
 
-  // ------------------------------------------------ submissions & reviews ----
+  // ------------------------------------------------------ presentations ----
 
-  console.log('Activity progress');
+  console.log('Presentations');
 
-  /** Evidence has to exist before an attempt: the server refuses one without. */
-  async function stageEvidence(recordId: string, uploaderId: string) {
-    const already = await models.Evidence.countDocuments({
-      studentVentureActivityId: recordId,
-    }).exec();
-    if (already > 0) return;
+  // Registers and checklists need somebody accountable for them, so the seed
+  // acts as the administrator rather than inventing an anonymous author.
+  const admin = await models.User.findOne({ role: 'ADMIN' }).select('_id').lean().exec();
+  if (!admin) throw new Error('No admin account found. Run `npm run seed` first.');
 
-    await models.Evidence.create({
-      submissionId: null,
-      studentVentureActivityId: recordId,
-      fileName: 'market-research.pdf',
-      fileUrl: 'https://res.cloudinary.com/demo/raw/upload/iev-demo/market-research.pdf',
-      publicId: `iev-tracker/evidence/${recordId}/demo`,
-      fileType: 'application/pdf',
-      resourceType: 'raw',
-      fileSize: 248_000,
-      uploadedBy: uploaderId,
-      uploadedAt: new Date(),
-    });
-  }
+  const firstActivity = await models.VentureActivity.findOne({ status: 'ACTIVE' })
+    .select('_id')
+    .sort({ order: 1 })
+    .lean()
+    .exec();
+  if (!firstActivity) throw new Error('No venture activities found. Run `npm run seed` first.');
 
-  let submitted = 0;
-  let reviewed = 0;
+  await setPresentationFolder(
+    firstActivity._id.toString(),
+    'https://drive.google.com/drive/folders/iev-demo-presentations',
+  );
 
+  const presentedRecordIds: string[] = [];
   for (const spec of VENTURES) {
-    if (spec.state === 'FRESH' || spec.state === 'NO_PAIR') continue;
+    if (spec.state !== 'PRESENTED') continue;
 
     const ventureId = ventureIdByStudent.get(spec.student);
     if (!ventureId) continue;
 
-    const studentId = idByHandle.get(spec.student)!;
     const progress = await getVentureProgress(ventureId);
-    const first = progress[0];
-    if (!first || first.record.attemptNumber > 0) continue;
-
-    await stageEvidence(first.recordId, studentId);
-
-    const submission = await createSubmission(
-      {
-        studentVentureActivityId: first.recordId,
-        title: `${spec.name} — problem validation`,
-        content:
-          'Interviewed 22 prospective customers across three neighbourhoods. Notes and the ' +
-          'interview guide are attached as evidence.',
-      },
-      studentId,
+    const first = progress.find(
+      (entry) => entry.activity._id.toString() === firstActivity._id.toString(),
     );
-    submitted += 1;
-
-    const submissionId = submission.submissionId;
-    const facultyId = spec.faculty ? idByHandle.get(spec.faculty)! : null;
-    const mentorId = spec.mentor ? idByHandle.get(spec.mentor)! : null;
-
-    // SUBMITTED stops here — those are the rows sitting in the review queue
-    // with both verdicts outstanding.
-    if (spec.state === 'SUBMITTED') continue;
-
-    if (spec.state === 'REVISION' && facultyId) {
-      await createReview(
-        {
-          submissionId,
-          status: 'REVISION_REQUIRED',
-          comments: 'Good interview coverage. Separate the problem from the proposed solution.',
-        },
-        { userId: facultyId, role: 'FACULTY' },
-      );
-      reviewed += 1;
-      continue;
-    }
-
-    if (facultyId) {
-      await createReview(
-        { submissionId, status: 'APPROVED', comments: 'Clear evidence of a real problem.' },
-        { userId: facultyId, role: 'FACULTY' },
-      );
-      reviewed += 1;
-    }
-
-    // HALF_REVIEWED leaves the mentor verdict outstanding, which is the state
-    // the dual-review rule exists for.
-    if (spec.state === 'COMPLETED' && mentorId) {
-      await createReview(
-        { submissionId, status: 'APPROVED', comments: 'Agreed — the demand signal is credible.' },
-        { userId: mentorId, role: 'MENTOR' },
-      );
-      reviewed += 1;
-    }
+    if (first) presentedRecordIds.push(first.recordId);
   }
 
-  console.log(`  ${submitted} submissions · ${reviewed} reviews`);
+  // Merged with what is already ticked, so a re-run never clears a mark
+  // somebody made by hand.
+  const alreadyReceived = await models.StudentVentureActivity.find({
+    ventureActivityId: firstActivity._id,
+    presentationReceivedAt: { $ne: null },
+  })
+    .select('_id')
+    .lean()
+    .exec();
+
+  const { marked: presented } = await setPresentationsReceived(
+    firstActivity._id.toString(),
+    [...new Set([...alreadyReceived.map((r) => r._id.toString()), ...presentedRecordIds])],
+    admin._id.toString(),
+  );
+
+  console.log(`  folder set on the first stage · ${presented} presentation(s) marked received`);
 
   // -------------------------------------------------------- attendance ----
 
@@ -594,11 +553,6 @@ async function main() {
     .exec();
 
   let marked = 0;
-
-  // Registers need somebody accountable for them, so the seed marks as the
-  // administrator rather than inventing an anonymous author.
-  const admin = await models.User.findOne({ role: 'ADMIN' }).select('_id').lean().exec();
-  if (!admin) throw new Error('No admin account found. Run `npm run seed` first.');
 
   for (const activity of activities) {
     const entries: Array<{

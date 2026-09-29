@@ -15,7 +15,6 @@ export interface QueueRow {
   activityCode: string;
   activityName: string;
   attemptNumber: number;
-  maxAttempts: number;
   myReviewStatus: ReviewStatus;
   otherReviewStatus: ReviewStatus;
   updatedAt: string;
@@ -81,12 +80,7 @@ export function ReviewQueue({
         text: `${row.activityCode} ${row.activityName}`,
       },
       {
-        node: (
-          <span className="tabular-nums">
-            {row.attemptNumber}
-            <span className="text-muted-foreground"> / {row.maxAttempts}</span>
-          </span>
-        ),
+        node: <span className="tabular-nums">{row.attemptNumber}</span>,
         sort: row.attemptNumber,
         text: `attempt ${row.attemptNumber}`,
       },

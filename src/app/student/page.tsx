@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { requireRole } from '@/lib/auth/currentUser';
 import { PageHeader } from '@/components/layout/AppShell';
 import { Card, CardBody, CardHeader, EmptyState, KpiCard, StatTile } from '@/components/ui/Card';
-import { CheckCircle2, GraduationCap, Play, RotateCcw, TrendingUp, UserCheck } from 'lucide-react';
+import { GraduationCap, Play, Presentation, TrendingUp, UserCheck } from 'lucide-react';
 import { FormMessage } from '@/components/ui/FormMessage';
 import { ActivityTimeline, ProgressBar } from '@/components/venture/ActivityTimeline';
 import {
@@ -61,7 +61,7 @@ export default async function StudentDashboardPage() {
   const rows = toTimeline(progress);
   const completed = rows.filter((r) => r.status === 'COMPLETED').length;
   const current = rows.find((r) => r.unlocked && r.status !== 'COMPLETED');
-  const needsAttention = rows.filter((r) => r.status === 'REVISION_REQUIRED').length;
+  const presented = rows.filter((r) => r.presentationReceivedAt !== null).length;
 
   return (
     <>
@@ -83,16 +83,16 @@ export default async function StudentDashboardPage() {
         <KpiCard
           label="Current activity"
           value={current ? current.activityCode : 'All done'}
-          hint={current?.name ?? 'Every activity has both approvals'}
+          hint={current?.name ?? 'Every stage is complete'}
           icon={Play}
           tone={current ? 'neutral' : 'positive'}
         />
         <KpiCard
-          label="Needs revision"
-          value={needsAttention}
-          hint={needsAttention > 0 ? 'A reviewer asked for changes' : 'Nothing sent back to you'}
-          icon={needsAttention > 0 ? RotateCcw : CheckCircle2}
-          tone={needsAttention > 0 ? 'warning' : 'positive'}
+          label="Presentations received"
+          value={presented}
+          hint={`of ${rows.length} stages`}
+          icon={Presentation}
+          tone="accent"
         />
 
         {/* Both reviewers on one tile: they are a pair, and an activity needs
@@ -127,8 +127,7 @@ export default async function StudentDashboardPage() {
                 ? 'Your faculty reviewer has not been assigned yet.'
                 : 'Your industry mentor has not been assigned yet.'}
           </span>{' '}
-          Both a faculty and a mentor approval are required to complete an activity, so contact the
-          programme office before submitting.
+          Contact the programme office so both can be assigned.
         </FormMessage>
       ) : null}
 
@@ -141,7 +140,7 @@ export default async function StudentDashboardPage() {
       <Card className="mt-5">
         <CardHeader
           title="Venture timeline"
-          description="Each activity unlocks when the previous one is approved by both your faculty and your mentor."
+          description="Each stage unlocks once the previous one is complete — your presentation is in and feedback has been given."
           action={<ExportMenu dataset="my-submissions" label="Export submissions" />}
         />
         <CardBody>

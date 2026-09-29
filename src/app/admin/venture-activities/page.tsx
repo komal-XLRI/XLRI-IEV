@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Activity, CalendarCheck, HeartHandshake, ListOrdered } from 'lucide-react';
+import { CalendarCheck, HeartHandshake, ListOrdered, Presentation } from 'lucide-react';
 import { PageHeader } from '@/components/layout/AppShell';
 import { Card, CardBody, CardHeader, EmptyState, KpiCard, Section } from '@/components/ui/Card';
 import { ExportMenu } from '@/components/export/ExportMenu';
@@ -16,6 +16,8 @@ import {
 } from '@/services/ventures/ventureActivityService';
 import { getActivityCompletionReport } from '@/services/reports/reportService';
 import { getAttendanceBoard } from '@/services/ventures/attendanceService';
+import { getPresentationTallies } from '@/services/ventures/presentationService';
+import { presentationStageState } from '@/lib/rules/presentations';
 import { listTerms } from '@/services/academic/academicService';
 import { ventureActivityImport } from '@/services/import/specs';
 import { windowState } from '@/lib/utils/dates';
@@ -29,14 +31,16 @@ export const metadata: Metadata = { title: 'Venture activities' };
 export const dynamic = 'force-dynamic';
 
 export default async function VentureActivitiesPage() {
-  const [activities, terms, supports, mappingIndex, completion, attendance] = await Promise.all([
-    listVentureActivities(),
-    listTerms(),
-    listSupportActivities(),
-    getSupportMappingIndex(),
-    getActivityCompletionReport(),
-    getAttendanceBoard(),
-  ]);
+  const [activities, terms, supports, mappingIndex, completion, attendance, tallies] =
+    await Promise.all([
+      listVentureActivities(),
+      listTerms(),
+      listSupportActivities(),
+      getSupportMappingIndex(),
+      getActivityCompletionReport(),
+      getAttendanceBoard(),
+      getPresentationTallies(),
+    ]);
 
   const supportCodeById = new Map(supports.map((s) => [s._id.toString(), s.activityCode]));
   const completionByCode = new Map(completion.map((row) => [row.activityCode, row]));
@@ -46,6 +50,7 @@ export default async function VentureActivitiesPage() {
   const views: VentureActivityView[] = activities.map((activity) => {
     const id = activity._id.toString();
     const stats = completionByCode.get(activity.activityCode);
+    const tally = tallies[id] ?? { total: 0, received: 0, completed: 0 };
 
     return {
       id,
@@ -55,8 +60,9 @@ export default async function VentureActivitiesPage() {
       startDate: activity.startDate ? activity.startDate.toISOString() : null,
       endDate: activity.endDate ? activity.endDate.toISOString() : null,
       durationDays: activity.durationDays,
-      maxAttempts: activity.maxAttempts,
-      evidenceRequired: activity.evidenceRequired,
+      presentationFolderUrl: activity.presentationFolderUrl ?? null,
+      presentationsReceived: tally.received,
+      presentationStage: presentationStageState(tally),
       status: activity.status,
       supportCodes: (mappingIndex[id] ?? [])
         .map((supportId) => supportCodeById.get(supportId))
@@ -79,7 +85,9 @@ export default async function VentureActivitiesPage() {
 
   const openNow = views.filter((view) => view.windowState === 'OPEN').length;
   const mapped = views.filter((view) => view.supportCodes.length > 0).length;
-  const totalAttemptsAllowance = views.reduce((sum, view) => sum + view.maxAttempts, 0);
+  const awaitingFeedback = views.filter(
+    (view) => view.presentationStage === 'AWAITING_FEEDBACK',
+  ).length;
 
   return (
     <>
@@ -129,10 +137,11 @@ export default async function VentureActivitiesPage() {
           tone="accent"
         />
         <KpiCard
-          label="Total attempt allowance"
-          value={totalAttemptsAllowance}
-          hint="Summed across all activities"
-          icon={Activity}
+          label="Awaiting feedback"
+          value={awaitingFeedback}
+          hint="Stages with every presentation in"
+          icon={Presentation}
+          tone={awaitingFeedback > 0 ? 'warning' : 'neutral'}
         />
       </div>
 
@@ -146,7 +155,7 @@ export default async function VentureActivitiesPage() {
       ) : (
         <Section
           title="Activity definitions"
-          description="In programme order. Both a faculty and a mentor approval are required on every one."
+          description="In programme order. Each stage completes once every student has presented and feedback has been given."
         >
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {views.map((view) => (

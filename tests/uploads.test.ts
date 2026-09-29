@@ -3,14 +3,10 @@ import {
   ALLOWED_EVIDENCE_MIME_TYPES,
   EVIDENCE_ACCEPT_ATTRIBUTE,
   EVIDENCE_FORMAT_GROUPS,
-  MAX_EVIDENCE_FILE_BYTES,
   evidenceMimeTypeFor,
   isAllowedEvidenceMimeType,
   resourceTypeForMime,
 } from '@/lib/constants/uploads';
-import { requestUploadSignatureSchema } from '@/validators/submissions';
-
-const studentVentureActivityId = 'aaaaaaaaaaaaaaaaaaaaaaaa';
 
 describe('evidence file policy', () => {
   it('accepts the documented types', () => {
@@ -97,56 +93,5 @@ describe('resolving the type of a chosen file', () => {
     expect(evidenceMimeTypeFor('installer.exe', 'application/x-msdownload')).toBeNull();
     expect(evidenceMimeTypeFor('page.html', 'text/html')).toBeNull();
     expect(evidenceMimeTypeFor('noextension', '')).toBeNull();
-  });
-});
-
-describe('upload signature request validation', () => {
-  const valid = {
-    studentVentureActivityId,
-    fileName: 'market-research.pdf',
-    fileType: 'application/pdf',
-    fileSize: 1024,
-  };
-
-  it('accepts a well-formed request', () => {
-    expect(requestUploadSignatureSchema.safeParse(valid).success).toBe(true);
-  });
-
-  it('rejects a disallowed file type', () => {
-    const result = requestUploadSignatureSchema.safeParse({ ...valid, fileType: 'text/html' });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects an oversized file', () => {
-    const result = requestUploadSignatureSchema.safeParse({
-      ...valid,
-      fileSize: MAX_EVIDENCE_FILE_BYTES + 1,
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects a zero-byte file', () => {
-    expect(requestUploadSignatureSchema.safeParse({ ...valid, fileSize: 0 }).success).toBe(false);
-  });
-
-  it('rejects a malformed activity record id', () => {
-    expect(
-      requestUploadSignatureSchema.safeParse({
-        ...valid,
-        studentVentureActivityId: 'not-an-id',
-      }).success,
-    ).toBe(false);
-  });
-
-  it('is scoped to the activity record, not to a submission', () => {
-    // Evidence has to be attachable before the attempt exists; a
-    // submission-scoped signature cannot express that.
-    const withSubmission = requestUploadSignatureSchema.safeParse({
-      submissionId: studentVentureActivityId,
-      fileName: 'a.pdf',
-      fileType: 'application/pdf',
-      fileSize: 10,
-    });
-    expect(withSubmission.success).toBe(false);
   });
 });

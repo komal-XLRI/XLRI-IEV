@@ -3,13 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { requireRole } from '@/lib/auth/currentUser';
 import { runAction, type ActionResult } from '@/lib/actions/actionResult';
-import { createSubmissionSchema } from '@/validators/submissions';
 import {
   studentVentureDetailsSchema,
   updateStudentSupportActivitySchema,
 } from '@/validators/ventures';
 import { objectId } from '@/validators/common';
-import { createSubmission } from '@/services/submissions/submissionService';
 import {
   getVentureByStudentId,
   updateStudentVenture,
@@ -22,42 +20,6 @@ function value(formData: FormData, key: string): string | undefined {
   const raw = formData.get(key);
   if (typeof raw !== 'string') return undefined;
   return raw.trim() === '' ? undefined : raw;
-}
-
-export interface SubmissionCreated {
-  submissionId: string;
-  attemptNumber: number;
-  submissionType: string;
-  evidenceRequired: boolean;
-}
-
-/**
- * Submits the next attempt.
- *
- * The attempt number, submission type and every eligibility check are computed
- * server-side in `createSubmission` — nothing here trusts the form.
- */
-export async function submitActivityAction(
-  _prev: unknown,
-  formData: FormData,
-): Promise<ActionResult<SubmissionCreated>> {
-  return runAction(async () => {
-    const user = await requireRole('STUDENT');
-
-    const input = createSubmissionSchema.parse({
-      studentVentureActivityId: value(formData, 'studentVentureActivityId'),
-      title: value(formData, 'title'),
-      content: value(formData, 'content'),
-      remarks: value(formData, 'remarks'),
-    });
-
-    const result = await createSubmission(input, user.userId);
-
-    revalidatePath('/student');
-    revalidatePath(`/student/activities/${input.studentVentureActivityId}`);
-
-    return result;
-  });
 }
 
 /** A student may edit their own venture narrative, never its reviewers. */

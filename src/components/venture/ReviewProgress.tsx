@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleSlash, Clock, Lock, OctagonAlert, RotateCcw } from 'lucide-react';
+import { CheckCircle2, CircleSlash, Clock, Lock, RotateCcw } from 'lucide-react';
 import { ActivityStatusBadge, ReviewStatusBadge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils/cn';
 import type { ReviewStatus, UiActivityState } from '@/lib/constants/status';
@@ -50,12 +50,12 @@ function Verdict({ role, status }: { role: 'Faculty' | 'Mentor'; status: ReviewS
 
 const OVERALL_NOTE: Record<UiActivityState, string> = {
   LOCKED: 'Earlier activities must be completed first.',
-  NOT_STARTED: 'No attempt has been submitted yet.',
-  IN_PROGRESS: 'Work in progress — nothing submitted for review yet.',
+  NOT_STARTED: 'Your presentation has not been received yet.',
+  IN_PROGRESS: 'Work in progress — no presentation received yet.',
+  PRESENTATION_RECEIVED: 'Presentation received. The stage completes once feedback is given.',
   UNDER_REVIEW: 'Both approvals are required before this activity completes.',
-  REVISION_REQUIRED: 'A reviewer asked for changes. Submit a revised attempt.',
-  COMPLETED: 'Both reviewers approved this attempt.',
-  MAX_ATTEMPTS_REACHED: 'No attempts remain. An administrator must intervene.',
+  REVISION_REQUIRED: 'A reviewer asked for changes on an earlier submission.',
+  COMPLETED: 'This stage is complete.',
 };
 
 export function DualReviewPanel({
@@ -103,62 +103,6 @@ export function DualReviewInline({
     <div className="flex flex-wrap items-center gap-1.5">
       <ReviewStatusBadge status={facultyStatus} prefix="Faculty" />
       <ReviewStatusBadge status={mentorStatus} prefix="Mentor" />
-    </div>
-  );
-}
-
-/**
- * Attempts used against the configured maximum.
- *
- * `maxAttempts` is a property of the activity, so it is always read from the
- * record rather than assumed — the default happens to be 3, but nothing here
- * depends on that.
- */
-export function AttemptMeter({
-  used,
-  max,
-  className,
-}: {
-  used: number;
-  max: number;
-  className?: string;
-}) {
-  const exhausted = used >= max;
-  const last = !exhausted && used === max - 1;
-
-  return (
-    <div className={cn('flex flex-wrap items-center gap-2', className)}>
-      <span className="flex items-center gap-1" aria-hidden="true">
-        {Array.from({ length: max }, (_, index) => (
-          <span
-            key={index}
-            className={cn(
-              'h-1.5 w-5 rounded-full',
-              index < used ? (exhausted ? 'bg-danger' : 'bg-chart-1') : 'bg-chart-track',
-            )}
-          />
-        ))}
-      </span>
-
-      <span
-        className={cn(
-          'text-[13px] font-medium',
-          exhausted ? 'text-danger-soft-foreground' : last ? 'text-warning-soft-foreground' : '',
-        )}
-      >
-        {exhausted ? (
-          <span className="inline-flex items-center gap-1">
-            <OctagonAlert className="size-3.5" aria-hidden="true" />
-            Maximum attempts reached
-          </span>
-        ) : (
-          `Attempt ${used + 1} of ${max}`
-        )}
-      </span>
-
-      {last ? (
-        <span className="type-caption">Final attempt — no further submissions after this.</span>
-      ) : null}
     </div>
   );
 }

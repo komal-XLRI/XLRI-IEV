@@ -1,36 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createSubmissionSchema, createReviewSchema } from '@/validators/submissions';
+import { createReviewSchema } from '@/validators/submissions';
 import { createVentureActivitySchema } from '@/validators/ventures';
 import { verifyOtpSchema } from '@/validators/auth';
 
 const id = 'aaaaaaaaaaaaaaaaaaaaaaaa';
-
-describe('submission input', () => {
-  it('accepts a valid submission', () => {
-    const result = createSubmissionSchema.safeParse({
-      studentVentureActivityId: id,
-      content: 'I interviewed 12 customers.',
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('has no attemptNumber field — the server computes it', () => {
-    const result = createSubmissionSchema.parse({
-      studentVentureActivityId: id,
-      content: 'x',
-    });
-    expect(result).not.toHaveProperty('attemptNumber');
-  });
-
-  it('silently drops a client-supplied attemptNumber', () => {
-    const result = createSubmissionSchema.parse({
-      studentVentureActivityId: id,
-      content: 'x',
-      attemptNumber: 99,
-    } as Record<string, unknown>);
-    expect(result).not.toHaveProperty('attemptNumber');
-  });
-});
 
 describe('review input', () => {
   it('accepts each allowed decision', () => {
@@ -63,7 +36,6 @@ describe('venture activity input', () => {
     order: 13,
     startDate: '2026-11-09',
     endDate: '2026-11-27',
-    maxAttempts: 3,
   };
 
   it('accepts a valid activity', () => {
@@ -86,10 +58,6 @@ describe('venture activity input', () => {
     expect(createVentureActivitySchema.safeParse({ ...base, endDate: '2026-11-10' }).success).toBe(
       true,
     );
-  });
-
-  it('rejects a maxAttempts below 1', () => {
-    expect(createVentureActivitySchema.safeParse({ ...base, maxAttempts: 0 }).success).toBe(false);
   });
 
   it('has no durationDays field — it is derived from the dates', () => {

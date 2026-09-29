@@ -8,7 +8,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   GraduationCap,
-  OctagonAlert,
+  Presentation,
   RotateCcw,
   UserCheck,
   Users,
@@ -61,7 +61,7 @@ export default async function AdminDashboardPage() {
       underReview: running.underReview + row.underReview,
       revisionRequired: running.revisionRequired + row.revisionRequired,
       completed: running.completed + row.completed,
-      maxAttemptsReached: running.maxAttemptsReached + row.maxAttemptsReached,
+      presentationReceived: running.presentationReceived + row.presentationReceived,
     }),
     {
       notStarted: 0,
@@ -69,7 +69,7 @@ export default async function AdminDashboardPage() {
       underReview: 0,
       revisionRequired: 0,
       completed: 0,
-      maxAttemptsReached: 0,
+      presentationReceived: 0,
     },
   );
 
@@ -184,15 +184,12 @@ export default async function AdminDashboardPage() {
             href="/admin/reviews?reviewStatus=REVISION_REQUIRED"
           />
           <KpiCard
-            label="Max attempts reached"
-            value={overview.maxAttemptsReached}
-            hint={
-              overview.maxAttemptsReached > 0
-                ? 'Blocked until the limit is raised'
-                : 'Nobody is blocked'
-            }
-            icon={overview.maxAttemptsReached > 0 ? OctagonAlert : CheckCircle2}
-            tone={overview.maxAttemptsReached > 0 ? 'danger' : 'positive'}
+            label="Presentations received"
+            value={overview.presentationReceived}
+            hint="In the Drive folder, awaiting feedback"
+            icon={Presentation}
+            tone="accent"
+            href="/admin/venture-activities"
           />
         </div>
       </Section>
@@ -224,9 +221,9 @@ export default async function AdminDashboardPage() {
                   { label: 'Revision required', value: totals.revisionRequired, tone: 'warning' },
                   { label: 'Completed', value: totals.completed, tone: 'success' },
                   {
-                    label: 'Max attempts reached',
-                    value: totals.maxAttemptsReached,
-                    tone: 'danger',
+                    label: 'Presentation received',
+                    value: totals.presentationReceived,
+                    tone: 'accent',
                   },
                 ]}
               />
@@ -446,7 +443,7 @@ export default async function AdminDashboardPage() {
                     </span>
                     <span className="type-caption">
                       {formatDateRange(activity.startDate, activity.endDate)} ·{' '}
-                      {activity.durationDays} days · max {activity.maxAttempts} attempts
+                      {activity.durationDays} days
                     </span>
                   </span>
                   <Badge tone={state === 'OPEN' ? 'success' : 'neutral'}>

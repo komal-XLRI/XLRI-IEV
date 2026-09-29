@@ -28,7 +28,6 @@ import {
 } from '../src/models';
 import {
   ACTIVITY_SUPPORT_MAPPING_SEED,
-  DEFAULT_MAX_ATTEMPTS,
   SUPPORT_ACTIVITY_SEED,
   VENTURE_ACTIVITY_SEED,
 } from '../src/lib/constants/activities';
@@ -155,8 +154,6 @@ async function seedVentureActivities(terms: Map<number, mongoose.Types.ObjectId>
       order: seed.order,
       startDate: window.startDate,
       endDate: window.endDate,
-      maxAttempts: DEFAULT_MAX_ATTEMPTS,
-      evidenceRequired: true,
       status: 'ACTIVE',
     });
 

@@ -23,8 +23,6 @@ interface ActivityView {
   startDate: string;
   endDate: string;
   durationDays: number;
-  maxAttempts: number;
-  evidenceRequired: boolean;
   status: string;
 }
 
@@ -149,23 +147,6 @@ export function EditVentureActivity({
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field
-                    label="Maximum attempts"
-                    htmlFor="maxAttempts"
-                    required
-                    hint="Attempt N+1 is refused by the server, not just the form."
-                    error={fieldErrors?.maxAttempts}
-                  >
-                    <TextInput
-                      id="maxAttempts"
-                      name="maxAttempts"
-                      type="number"
-                      min={1}
-                      max={10}
-                      required
-                      defaultValue={activity.maxAttempts}
-                    />
-                  </Field>
                   <Field label="Status" htmlFor="status">
                     <Select id="status" name="status" defaultValue={activity.status}>
                       <option value="ACTIVE">Active</option>
@@ -173,12 +154,6 @@ export function EditVentureActivity({
                     </Select>
                   </Field>
                 </div>
-
-                <Checkbox
-                  name="evidenceRequired"
-                  label="Evidence required"
-                  defaultChecked={activity.evidenceRequired}
-                />
 
                 <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
               </div>

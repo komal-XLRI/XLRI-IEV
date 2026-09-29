@@ -103,7 +103,7 @@ export async function SubmissionReviewScreen({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Attempt" value={`${submission.attemptNumber} / ${activity.maxAttempts}`} />
+        <StatTile label="Attempt" value={submission.attemptNumber} />
         <StatTile label="Type" value={submission.submissionType.toLowerCase()} />
         <StatTile label="Submitted" value={formatDateTime(submission.submittedAt)} />
         <StatTile
@@ -135,11 +135,7 @@ export async function SubmissionReviewScreen({
                   Evidence ({evidence.length})
                 </p>
                 {evidence.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">
-                    {activity.evidenceRequired
-                      ? 'No evidence uploaded — this activity expects supporting files.'
-                      : 'No evidence uploaded.'}
-                  </p>
+                  <p className="text-muted-foreground text-sm">No evidence uploaded.</p>
                 ) : (
                   <EvidenceList evidence={serialize(evidence)} />
                 )}

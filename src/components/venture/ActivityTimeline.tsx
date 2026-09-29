@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ChevronRight, Lock } from 'lucide-react';
 import { ActivityStatusBadge, ReviewStatusBadge } from '@/components/ui/Badge';
 import { MeterBar } from '@/components/ui/Chart';
-import { formatDateRange, windowState } from '@/lib/utils/dates';
+import { formatDate, formatDateRange, windowState } from '@/lib/utils/dates';
 import { cn } from '@/lib/utils/cn';
 import type { TimelineRow } from '@/types/progress';
 
@@ -10,9 +10,9 @@ import type { TimelineRow } from '@/types/progress';
  * The venture timeline. `LOCKED` rows are dimmed and never linked — the
  * progression rule is enforced server-side, this just reflects it.
  *
- * Every row states the attempt position and, once anything has been submitted,
- * both reviewers' verdicts. A student should never have to open an activity to
- * find out whether it is waiting on faculty, on their mentor, or on them.
+ * Every row states whether the student's presentation for that stage has been
+ * received and, for work submitted under the retired in-app flow, both
+ * reviewers' verdicts — nobody should have to open an activity to see where it is.
  */
 export function ActivityTimeline({
   rows,
@@ -30,7 +30,6 @@ export function ActivityTimeline({
       {rows.map((row) => {
         const href = row.uiState === 'LOCKED' ? null : (hrefFor?.(row) ?? null);
         const locked = row.uiState === 'LOCKED';
-        const exhausted = row.uiState === 'MAX_ATTEMPTS_REACHED';
         const open =
           row.startDate && row.endDate
             ? windowState(new Date(row.startDate), new Date(row.endDate), now) === 'OPEN'
@@ -51,11 +50,9 @@ export function ActivityTimeline({
                 'mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg font-mono text-[11px] font-bold',
                 row.status === 'COMPLETED'
                   ? 'bg-success text-success-foreground'
-                  : exhausted
-                    ? 'bg-danger text-danger-foreground'
-                    : locked
-                      ? 'bg-muted text-muted-foreground'
-                      : 'bg-primary-soft text-primary-soft-foreground',
+                  : locked
+                    ? 'bg-muted text-muted-foreground'
+                    : 'bg-primary-soft text-primary-soft-foreground',
               )}
             >
               {locked ? <Lock className="size-3.5" aria-hidden="true" /> : row.activityCode}
@@ -77,13 +74,12 @@ export function ActivityTimeline({
 
               <p className="type-caption mt-1">
                 {formatDateRange(row.startDate, row.endDate)} · {row.durationDays} days ·{' '}
-                {/* Read from the record: the attempt limit is per activity. */}
-                {exhausted
-                  ? `${row.attemptsUsed}/${row.maxAttempts} attempts used — none left`
-                  : `Attempt ${Math.min(row.attemptsUsed + 1, row.maxAttempts)} of ${row.maxAttempts}`}
+                {row.presentationReceivedAt
+                  ? `Presentation received ${formatDate(row.presentationReceivedAt)}`
+                  : 'Presentation not received yet'}
               </p>
 
-              {showReviewers && !locked && row.attemptsUsed > 0 ? (
+              {showReviewers && !locked && row.submissionsMade > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <ReviewStatusBadge prefix="Faculty" status={row.facultyReviewStatus} />
                   <ReviewStatusBadge prefix="Mentor" status={row.mentorReviewStatus} />
@@ -93,10 +89,7 @@ export function ActivityTimeline({
               {locked ? (
                 <p className="type-caption mt-1.5">
                   Unlocks when{' '}
-                  {row.order <= 1
-                    ? 'the programme starts'
-                    : 'the previous activity is approved by both reviewers'}
-                  .
+                  {row.order <= 1 ? 'the programme starts' : 'the previous stage is completed'}.
                 </p>
               ) : null}
             </div>

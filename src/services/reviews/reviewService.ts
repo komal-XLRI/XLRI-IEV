@@ -88,7 +88,7 @@ async function commitReview(params: {
   recordedById?: string | null;
 }) {
   const { context, reviewerType, reviewerId } = params;
-  const { record, activity } = context;
+  const { record } = context;
 
   return withTransaction(async (session) => {
     const [review] = await Review.create(
@@ -117,7 +117,6 @@ async function commitReview(params: {
       facultyReviewStatus,
       mentorReviewStatus,
       attemptsUsed: record.attemptNumber,
-      maxAttempts: activity.maxAttempts,
     });
 
     const reviewerSnapshot =
@@ -538,10 +537,7 @@ export async function recomputeActivityFromReviews(
   // Only the current attempt decides the record. An old attempt's verdict is
   // history and corrections to it change nothing about where the student is.
   const reviews = record.currentSubmissionId
-    ? await Review.find({ submissionId: record.currentSubmissionId })
-        .session(session)
-        .lean()
-        .exec()
+    ? await Review.find({ submissionId: record.currentSubmissionId }).session(session).lean().exec()
     : [];
 
   const facultyReview = reviews.find((review) => review.reviewerType === 'FACULTY');
@@ -554,7 +550,6 @@ export async function recomputeActivityFromReviews(
     facultyReviewStatus,
     mentorReviewStatus,
     attemptsUsed: record.attemptNumber,
-    maxAttempts: activity.maxAttempts,
   });
 
   await StudentVentureActivity.updateOne(
@@ -612,7 +607,10 @@ export async function updateReview(input: UpdateReviewInput, adminUserId: string
       sessionOption(session),
     ).exec();
 
-    const outcome = await recomputeActivityFromReviews(submission.studentVentureActivityId.toString(), session);
+    const outcome = await recomputeActivityFromReviews(
+      submission.studentVentureActivityId.toString(),
+      session,
+    );
 
     logger.info('Review corrected', {
       reviewId: review._id.toString(),
@@ -649,7 +647,10 @@ export async function deleteReview(reviewId: string, adminUserId: string) {
   return withTransaction(async (session) => {
     await Review.deleteOne({ _id: review._id }, sessionOption(session)).exec();
 
-    const outcome = await recomputeActivityFromReviews(submission.studentVentureActivityId.toString(), session);
+    const outcome = await recomputeActivityFromReviews(
+      submission.studentVentureActivityId.toString(),
+      session,
+    );
 
     logger.info('Review deleted', {
       reviewId,

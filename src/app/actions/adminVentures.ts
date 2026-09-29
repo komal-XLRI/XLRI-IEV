@@ -7,6 +7,8 @@ import {
   assignReviewersSchema,
   createStudentVentureSchema,
   createVentureActivitySchema,
+  presentationFolderSchema,
+  presentationsReceivedSchema,
   setSupportMappingsSchema,
   updateStudentVentureSchema,
   updateVentureActivitySchema,
@@ -26,6 +28,10 @@ import {
   createStudentVenture,
   updateStudentVenture,
 } from '@/services/ventures/studentVentureService';
+import {
+  setPresentationFolder,
+  setPresentationsReceived,
+} from '@/services/ventures/presentationService';
 import { serialize } from '@/lib/utils/serialize';
 
 function value(formData: FormData, key: string): string | undefined {
@@ -36,10 +42,6 @@ function value(formData: FormData, key: string): string | undefined {
 
 function values(formData: FormData, key: string): string[] {
   return formData.getAll(key).filter((v): v is string => typeof v === 'string' && v.length > 0);
-}
-
-function checkbox(formData: FormData, key: string): boolean {
-  return formData.get(key) === 'on' || formData.get(key) === 'true';
 }
 
 // ------------------------------------------------- Venture activities ----
@@ -59,8 +61,6 @@ export async function createVentureActivityAction(
       order: value(formData, 'order'),
       startDate: value(formData, 'startDate'),
       endDate: value(formData, 'endDate'),
-      maxAttempts: value(formData, 'maxAttempts'),
-      evidenceRequired: checkbox(formData, 'evidenceRequired'),
       status: value(formData, 'status') ?? 'ACTIVE',
     });
 
@@ -86,8 +86,6 @@ export async function updateVentureActivityAction(
       order: value(formData, 'order'),
       startDate: value(formData, 'startDate'),
       endDate: value(formData, 'endDate'),
-      maxAttempts: value(formData, 'maxAttempts'),
-      evidenceRequired: checkbox(formData, 'evidenceRequired'),
       status: value(formData, 'status'),
     });
 
@@ -108,6 +106,58 @@ export async function deleteVentureActivityAction(
     await deleteVentureActivity(objectId.parse(value(formData, 'activityId')));
     revalidatePath('/admin/venture-activities');
     return { deleted: true as const };
+  });
+}
+
+// ------------------------------------------------------ Presentations ----
+
+function revalidatePresentations(ventureActivityId: string) {
+  revalidatePath('/admin/venture-activities');
+  revalidatePath(`/admin/venture-activities/${ventureActivityId}`);
+  revalidatePath('/student', 'layout');
+}
+
+/** Sets (or, when blank, clears) the Drive folder for a stage's presentations. */
+export async function setPresentationFolderAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ presentationFolderUrl: string | null }>> {
+  return runAction(async () => {
+    await requireAdmin();
+
+    const input = presentationFolderSchema.parse({
+      ventureActivityId: value(formData, 'ventureActivityId'),
+      presentationFolderUrl: submitted(formData, 'presentationFolderUrl') ?? '',
+    });
+
+    await setPresentationFolder(input.ventureActivityId, input.presentationFolderUrl);
+
+    revalidatePresentations(input.ventureActivityId);
+    return { presentationFolderUrl: input.presentationFolderUrl };
+  });
+}
+
+/** Saves the checklist of students whose presentation is in the folder. */
+export async function setPresentationsReceivedAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ marked: number; cleared: number }>> {
+  return runAction(async () => {
+    const admin = await requireAdmin();
+
+    const input = presentationsReceivedSchema.parse({
+      ventureActivityId: value(formData, 'ventureActivityId'),
+      receivedRecordIds: values(formData, 'receivedRecordIds'),
+    });
+
+    const result = await setPresentationsReceived(
+      input.ventureActivityId,
+      input.receivedRecordIds,
+      admin.userId,
+    );
+
+    revalidatePresentations(input.ventureActivityId);
+    return result;
   });
 }
 

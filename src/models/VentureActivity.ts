@@ -1,7 +1,6 @@
 import { Schema, type Model, type Types } from 'mongoose';
 import { CONTENT_STATUSES, type ContentStatus } from '@/lib/constants/status';
 import { durationInDays, isEndOnOrAfterStart } from '@/lib/utils/dates';
-import { DEFAULT_MAX_ATTEMPTS } from '@/lib/constants/activities';
 import { registerModel } from './registerModel';
 
 /** Master definition of the 12 Venture Activities. */
@@ -18,8 +17,12 @@ export interface IVentureActivity {
   /** Derived from the configured dates on every save; stored for reporting. */
   durationDays: number;
 
-  maxAttempts: number;
-  evidenceRequired: boolean;
+  /**
+   * The shared Drive folder the cohort's presentations for this stage go into.
+   * Which students have actually delivered one is recorded per student, on
+   * `StudentVentureActivity.presentationReceivedAt`.
+   */
+  presentationFolderUrl?: string | null;
 
   status: ContentStatus;
 
@@ -39,8 +42,7 @@ const ventureActivitySchema = new Schema<IVentureActivity>(
     endDate: { type: Date, required: true },
     durationDays: { type: Number, required: true, min: 1, default: 1 },
 
-    maxAttempts: { type: Number, required: true, min: 1, default: DEFAULT_MAX_ATTEMPTS },
-    evidenceRequired: { type: Boolean, required: true, default: true },
+    presentationFolderUrl: { type: String, trim: true, default: null },
 
     status: { type: String, required: true, enum: CONTENT_STATUSES, default: 'ACTIVE' },
   },

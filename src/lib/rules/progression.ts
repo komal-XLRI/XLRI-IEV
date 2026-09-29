@@ -3,11 +3,9 @@ import type { StudentActivityStatus, UiActivityState } from '@/lib/constants/sta
 /**
  * Sequential progression.
  *
- * V(n) unlocks only when V(n-1) is COMPLETED — i.e. when both reviewers have
- * approved it. An activity sitting at MAX_ATTEMPTS_REACHED therefore does NOT
- * unlock its successor; that case needs Admin intervention (raising
- * `maxAttempts` on the activity), which is intentional rather than an
- * oversight.
+ * V(n) unlocks only when V(n-1) is COMPLETED. A received presentation alone
+ * does not complete a stage — the feedback on it does — so an activity at
+ * PRESENTATION_RECEIVED does not unlock its successor.
  */
 export interface ProgressionEntry {
   /** `order` from the VentureActivity master record. */

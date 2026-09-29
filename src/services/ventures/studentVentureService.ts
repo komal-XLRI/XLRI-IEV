@@ -17,7 +17,6 @@ import { ConflictError, ForbiddenError, NotFoundError } from '@/lib/errors';
 import { containsPattern } from '@/lib/utils/regex';
 import { assertUserHasRole } from '@/services/users/userService';
 import { computeProgression, type ProgressionEntry } from '@/lib/rules/progression';
-import { evaluateAttempt, type AttemptDecision } from '@/lib/rules/attempts';
 import { describeReviewProgress } from '@/lib/rules/dualReview';
 import type { UiActivityState, VentureStatus } from '@/lib/constants/status';
 import type { AssignReviewersInput, CreateStudentVentureInput } from '@/validators/ventures';
@@ -338,8 +337,6 @@ export async function refreshCurrentActivity(
 interface ProgressRow extends ProgressionEntry {
   recordId: string;
   ventureActivityId: string;
-  maxAttempts: number;
-  attemptsUsed: number;
 }
 
 async function loadProgressRows(
@@ -353,7 +350,7 @@ async function loadProgressRows(
 
   const activityIds = records.map((r) => r.ventureActivityId);
   const activities = await VentureActivity.find({ _id: { $in: activityIds } })
-    .select('order maxAttempts')
+    .select('order')
     .session(session)
     .lean()
     .exec();
@@ -369,8 +366,6 @@ async function loadProgressRows(
         ventureActivityId: record.ventureActivityId.toString(),
         order: activity.order,
         status: record.status,
-        maxAttempts: activity.maxAttempts,
-        attemptsUsed: record.attemptNumber,
       } satisfies ProgressRow;
     })
     .filter((row): row is ProgressRow => row !== null);
@@ -384,7 +379,6 @@ export interface VentureActivityProgress {
   record: IStudentVentureActivity;
   uiState: UiActivityState;
   unlocked: boolean;
-  attempt: AttemptDecision;
   reviewSummary: string;
 }
 
@@ -430,20 +424,12 @@ export async function getVentureProgress(
     .sort((a, b) => a.activity.order - b.activity.order)
     .map(({ record, activity }) => {
       const derived = unlockedByKey.get(record._id.toString())!;
-      const attempt = evaluateAttempt({
-        attemptsUsed: record.attemptNumber,
-        maxAttempts: activity.maxAttempts,
-        status: record.status,
-        unlocked: derived.unlocked,
-      });
-
       return {
         recordId: record._id.toString(),
         activity: activity as IVentureActivity,
         record: record as IStudentVentureActivity,
         uiState: derived.uiState,
         unlocked: derived.unlocked,
-        attempt,
         reviewSummary: describeReviewProgress(
           record.facultyReviewStatus,
           record.mentorReviewStatus,
@@ -475,7 +461,6 @@ export async function getActivityContext(studentVentureActivityId: string) {
     venture: venture as IStudentVenture,
     activity: activity as IVentureActivity,
     unlocked: entry?.unlocked ?? false,
-    attempt: entry?.attempt,
   };
 }
 

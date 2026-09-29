@@ -1,9 +1,8 @@
 'use client';
 
-import { Checkbox, Field, Select, TextArea, TextInput } from '@/components/ui/Field';
+import { Field, Select, TextArea, TextInput } from '@/components/ui/Field';
 import { RecordDialog } from './RecordDialog';
 import { createVentureActivityAction } from '@/app/actions/adminVentures';
-import { DEFAULT_MAX_ATTEMPTS } from '@/lib/constants/activities';
 
 export interface TermOption {
   _id: string;
@@ -17,13 +16,13 @@ export function VentureActivityForm({ terms }: { terms: TermOption[] }) {
       action={createVentureActivityAction}
       triggerLabel="New activity"
       title="Add a venture activity"
-      description="Start and end dates drive the displayed duration; the attempt limit is enforced by the server."
+      description="Start and end dates drive the displayed duration. Add the presentations Drive folder from the activity page once it exists."
       submitLabel="Create activity"
       successMessage="Activity created"
     >
       {({ fieldErrors }) => (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Code" htmlFor="activityCode" required error={fieldErrors?.activityCode}>
               <TextInput
                 id="activityCode"
@@ -48,23 +47,6 @@ export function VentureActivityForm({ terms }: { terms: TermOption[] }) {
                 ))}
               </Select>
             </Field>
-            <Field
-              label="Max attempts"
-              htmlFor="maxAttempts"
-              required
-              error={fieldErrors?.maxAttempts}
-              hint="Per student, per activity."
-            >
-              <TextInput
-                id="maxAttempts"
-                name="maxAttempts"
-                type="number"
-                min={1}
-                max={10}
-                required
-                defaultValue={DEFAULT_MAX_ATTEMPTS}
-              />
-            </Field>
           </div>
 
           <Field label="Name" htmlFor="name" required error={fieldErrors?.name}>
@@ -83,8 +65,6 @@ export function VentureActivityForm({ terms }: { terms: TermOption[] }) {
               <TextInput id="endDate" name="endDate" type="date" required />
             </Field>
           </div>
-
-          <Checkbox name="evidenceRequired" label="Evidence required" defaultChecked />
         </>
       )}
     </RecordDialog>

@@ -64,7 +64,7 @@ export default async function StudentAttendancePage() {
     <>
       <PageHeader
         title="My attendance"
-        description="Day by day, as your programme office has recorded it against your venture activities. This is a record only — it does not affect your progress, your attempts or your reviews."
+        description="Day by day, as your programme office has recorded it against your venture activities. This is a record only — it does not affect your progress, your presentations or your reviews."
       />
 
       {activities.length === 0 ? (
