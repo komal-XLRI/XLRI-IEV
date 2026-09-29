@@ -7,7 +7,6 @@ import {
   Grid3x3,
   Layers,
   Presentation,
-  RefreshCw,
   ScrollText,
   TrendingUp,
   Users,
@@ -22,7 +21,6 @@ import { FilterBar } from '@/components/filters/FilterBar';
 import { ExportMenu } from '@/components/export/ExportMenu';
 import {
   getActivityCompletionReport,
-  getAttemptsReport,
   getReviewSummaryReport,
   getStudentProgressReport,
 } from '@/services/reports/reportService';
@@ -34,8 +32,6 @@ import { humanise } from '@/services/export/filterLabels';
 export const metadata: Metadata = { title: 'Reports' };
 export const dynamic = 'force-dynamic';
 
-const ATTEMPT_PREVIEW = 100;
-
 export default async function AdminReportsPage({
   searchParams,
 }: {
@@ -44,12 +40,11 @@ export default async function AdminReportsPage({
   const params = await searchParams;
   const filters = parseReportFilters(params);
 
-  const [options, progress, completion, reviewSummary, attempts] = await Promise.all([
+  const [options, progress, completion, reviewSummary] = await Promise.all([
     getFilterOptions(),
     getStudentProgressReport(filters),
     getActivityCompletionReport(filters),
     getReviewSummaryReport(filters),
-    getAttemptsReport(filters),
   ]);
 
   /**
@@ -89,14 +84,6 @@ export default async function AdminReportsPage({
       icon: ClipboardCheck,
       rows: reviewSummary.length,
       unit: 'reviewer',
-    },
-    {
-      dataset: 'attempts',
-      title: 'Submission & attempt report',
-      description: 'Attempts used against each activity’s configured maximum.',
-      icon: RefreshCw,
-      rows: attempts.length,
-      unit: 'record',
     },
     {
       dataset: 'review-log',
@@ -329,14 +316,14 @@ export default async function AdminReportsPage({
                           [
                             { label: 'Not started', value: row.notStarted, tone: 'neutral' },
                             { label: 'In progress', value: row.inProgress, tone: 'primary' },
+                            {
+                              label: 'Presented',
+                              value: row.presentationReceived,
+                              tone: 'accent',
+                            },
                             { label: 'Under review', value: row.underReview, tone: 'warning' },
                             { label: 'Revision', value: row.revisionRequired, tone: 'warning' },
                             { label: 'Completed', value: row.completed, tone: 'success' },
-                            {
-                              label: 'Max attempts',
-                              value: row.maxAttemptsReached,
-                              tone: 'danger',
-                            },
                           ] satisfies Segment[]
                         ).filter((segment) => segment.value > 0)}
                       />
@@ -409,76 +396,6 @@ export default async function AdminReportsPage({
                     node: <span className="font-semibold tabular-nums">{row.pending}</span>,
                     sort: row.pending,
                     text: `${row.pending}`,
-                  },
-                ],
-              }))}
-            />
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Attempts and revisions"
-              description={`Activities with at least one submission. Showing up to ${ATTEMPT_PREVIEW}.`}
-              icon={RefreshCw}
-              action={<ExportMenu dataset="attempts" />}
-            />
-            <DataTable
-              caption="Attempts and revisions"
-              searchPlaceholder="Search student or activity"
-              emptyTitle="No submissions match the selected filters"
-              pageSize={10}
-              columns={[
-                { key: 'student', header: 'Student' },
-                { key: 'activity', header: 'Activity', hideBelow: 'sm' },
-                { key: 'used', header: 'Used', align: 'right' },
-                { key: 'left', header: 'Left', align: 'right', hideBelow: 'md' },
-                { key: 'status', header: 'Status' },
-              ]}
-              rows={attempts.slice(0, ATTEMPT_PREVIEW).map((row, index) => ({
-                id: `${row.studentName}-${row.activityCode}-${index}`,
-                cells: [
-                  {
-                    node: <span className="font-medium">{row.studentName}</span>,
-                    sort: row.studentName,
-                    text: row.studentName,
-                  },
-                  {
-                    node: (
-                      <span>
-                        <span className="font-mono text-xs">{row.activityCode}</span>{' '}
-                        <span className="text-muted-foreground">{row.activityName}</span>
-                      </span>
-                    ),
-                    sort: row.activityCode,
-                    text: `${row.activityCode} ${row.activityName}`,
-                  },
-                  {
-                    node: (
-                      <span className="tabular-nums">
-                        {row.attemptsUsed}
-                        <span className="text-muted-foreground"> / {row.maxAttempts}</span>
-                      </span>
-                    ),
-                    sort: row.attemptsUsed,
-                    text: `${row.attemptsUsed}`,
-                  },
-                  textCell(row.attemptsRemaining),
-                  {
-                    node: (
-                      <Badge
-                        tone={
-                          row.status === 'COMPLETED'
-                            ? 'success'
-                            : row.status === 'MAX_ATTEMPTS_REACHED'
-                              ? 'danger'
-                              : 'neutral'
-                        }
-                      >
-                        {humanise(row.status)}
-                      </Badge>
-                    ),
-                    sort: row.status,
-                    text: humanise(row.status) ?? row.status,
                   },
                 ],
               }))}

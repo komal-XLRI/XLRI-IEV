@@ -8,7 +8,7 @@ import {
   CheckCircle2,
   Lock,
   MapPin,
-  OctagonAlert,
+  Presentation,
   RotateCcw,
   Video,
   type LucideIcon,
@@ -72,20 +72,20 @@ const ACTIVITY_TONE: Record<UiActivityState, Tone> = {
   LOCKED: 'muted',
   NOT_STARTED: 'neutral',
   IN_PROGRESS: 'info',
+  PRESENTATION_RECEIVED: 'info',
   UNDER_REVIEW: 'warning',
   REVISION_REQUIRED: 'warning',
   COMPLETED: 'success',
-  MAX_ATTEMPTS_REACHED: 'danger',
 };
 
 const ACTIVITY_LABEL: Record<UiActivityState, string> = {
   LOCKED: 'Locked',
   NOT_STARTED: 'Not started',
   IN_PROGRESS: 'In progress',
+  PRESENTATION_RECEIVED: 'Presentation received',
   UNDER_REVIEW: 'Under review',
   REVISION_REQUIRED: 'Revision required',
   COMPLETED: 'Completed',
-  MAX_ATTEMPTS_REACHED: 'Max attempts reached',
 };
 
 /**
@@ -98,10 +98,10 @@ const ACTIVITY_ICON: Record<UiActivityState, LucideIcon> = {
   LOCKED: Lock,
   NOT_STARTED: CircleDashed,
   IN_PROGRESS: Clock,
+  PRESENTATION_RECEIVED: Presentation,
   UNDER_REVIEW: Clock,
   REVISION_REQUIRED: RotateCcw,
   COMPLETED: CheckCircle2,
-  MAX_ATTEMPTS_REACHED: OctagonAlert,
 };
 
 export function ActivityStatusBadge({ state }: { state: UiActivityState }) {

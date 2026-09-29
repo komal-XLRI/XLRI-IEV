@@ -108,7 +108,7 @@ export default async function AdminStudentDetailPage({
         <KpiCard
           label="Submissions"
           value={totals.submissions}
-          hint={`${totals.attemptsUsed} attempt(s) used · ${totals.reviewsReceived} verdict(s)`}
+          hint={`${totals.attemptsUsed} earlier submission(s) · ${totals.reviewsReceived} verdict(s)`}
           icon={FileText}
         />
         <KpiCard
@@ -176,7 +176,7 @@ export default async function AdminStudentDetailPage({
               <EmptyState
                 size="sm"
                 title="Nothing submitted yet"
-                description="Attempts appear here as soon as the student submits one."
+                description="Only work submitted under the earlier in-app flow appears here. Presentations are tracked on each venture activity."
               />
             ) : (
               <ul className="divide-border divide-y">

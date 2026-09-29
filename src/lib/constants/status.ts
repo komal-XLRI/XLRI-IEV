@@ -1,11 +1,19 @@
-/** Lifecycle of a student's work on one Venture Activity. */
+/**
+ * Lifecycle of a student's work on one Venture Activity.
+ *
+ * The live path is NOT_STARTED → PRESENTATION_RECEIVED (the administrator has
+ * ticked the student's presentation off against the activity's Drive folder)
+ * → COMPLETED (feedback given). IN_PROGRESS, UNDER_REVIEW and
+ * REVISION_REQUIRED belong to the retired in-app submission flow and remain
+ * only so records written by it still read correctly.
+ */
 export const STUDENT_ACTIVITY_STATUSES = [
   'NOT_STARTED',
   'IN_PROGRESS',
+  'PRESENTATION_RECEIVED',
   'UNDER_REVIEW',
   'REVISION_REQUIRED',
   'COMPLETED',
-  'MAX_ATTEMPTS_REACHED',
 ] as const;
 export type StudentActivityStatus = (typeof STUDENT_ACTIVITY_STATUSES)[number];
 
@@ -92,10 +100,10 @@ export const STATUS_LABELS: Record<UiActivityState, string> = {
   LOCKED: 'Locked',
   NOT_STARTED: 'Not started',
   IN_PROGRESS: 'In progress',
+  PRESENTATION_RECEIVED: 'Presentation received',
   UNDER_REVIEW: 'Under review',
   REVISION_REQUIRED: 'Revision required',
   COMPLETED: 'Completed',
-  MAX_ATTEMPTS_REACHED: 'Max attempts reached',
 };
 
 export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {

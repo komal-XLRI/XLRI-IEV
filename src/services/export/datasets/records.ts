@@ -315,8 +315,7 @@ interface VentureActivityRow {
   startDate: Date;
   endDate: Date;
   durationDays: number;
-  maxAttempts: number;
-  evidenceRequired: boolean;
+  presentationFolderUrl: string | null;
   supportActivities: string;
   status: string;
 }
@@ -350,19 +349,10 @@ export const ventureActivitiesDataset = defineDataset<VentureActivityRow>({
       width: 13,
     },
     {
-      key: 'maxAttempts',
-      header: 'Max attempts',
-      type: 'number',
-      align: 'right',
-      value: (r) => r.maxAttempts,
-      width: 11,
-    },
-    {
-      key: 'evidenceRequired',
-      header: 'Evidence required',
-      type: 'boolean',
-      value: (r) => r.evidenceRequired,
-      width: 15,
+      key: 'presentationFolderUrl',
+      header: 'Presentation folder',
+      value: (r) => r.presentationFolderUrl,
+      width: 30,
     },
     {
       key: 'supportActivities',
@@ -417,8 +407,7 @@ export const ventureActivitiesDataset = defineDataset<VentureActivityRow>({
       startDate: activity.startDate,
       endDate: activity.endDate,
       durationDays: activity.durationDays,
-      maxAttempts: activity.maxAttempts,
-      evidenceRequired: activity.evidenceRequired,
+      presentationFolderUrl: activity.presentationFolderUrl ?? null,
       supportActivities: (byActivity.get(activity._id.toString()) ?? []).sort().join(', '),
       status: activity.status,
     }));
@@ -927,7 +916,7 @@ export const ventureAttendanceDataset = defineDataset<AttendanceExportRow>({
   key: 'venture-attendance',
   title: 'Venture activity attendance',
   description:
-    'Who attended each Venture Activity, on each date. Attendance gates nothing — an absence does not lock an activity, consume an attempt or affect a review.',
+    'Who attended each Venture Activity, on each date. Attendance gates nothing — an absence does not lock an activity or affect its presentation or review.',
   fileBase: 'venture-attendance',
   roles: ['ADMIN'],
   defaultSortLabel: 'Date, then student',

@@ -64,8 +64,6 @@ export async function createVentureActivity(input: CreateVentureActivityInput) {
     order: input.order,
     startDate: input.startDate,
     endDate: input.endDate,
-    maxAttempts: input.maxAttempts,
-    evidenceRequired: input.evidenceRequired,
     status: input.status,
   });
 
@@ -97,8 +95,6 @@ export async function updateVentureActivity(activityId: string, input: UpdateVen
   if (input.order !== undefined) activity.order = input.order;
   if (input.startDate !== undefined) activity.startDate = input.startDate;
   if (input.endDate !== undefined) activity.endDate = input.endDate;
-  if (input.maxAttempts !== undefined) activity.maxAttempts = input.maxAttempts;
-  if (input.evidenceRequired !== undefined) activity.evidenceRequired = input.evidenceRequired;
   if (input.status !== undefined) activity.status = input.status;
 
   // Re-derived by the pre-validate hook too; kept here so `.toObject()` is fresh.

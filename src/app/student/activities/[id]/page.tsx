@@ -1,19 +1,26 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { forbidden, notFound } from 'next/navigation';
-import { ArrowLeft, CalendarRange, CheckCircle2, HeartHandshake, Timer } from 'lucide-react';
+import {
+  ArrowLeft,
+  CalendarRange,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  FolderOpen,
+  HeartHandshake,
+  Presentation,
+  Timer,
+} from 'lucide-react';
 import { requireRole } from '@/lib/auth/currentUser';
 import { PageHeader } from '@/components/layout/AppShell';
 import { Card, CardBody, CardHeader, EmptyState, StatTile } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
+import { ActivityStatusBadge, Badge } from '@/components/ui/Badge';
 import { MeterBar } from '@/components/ui/Chart';
-import { AttemptMeter, DualReviewPanel } from '@/components/venture/ReviewProgress';
 import { getActivityContext, getVentureProgress } from '@/services/ventures/studentVentureService';
 import { getSubmissionHistory } from '@/services/submissions/submissionService';
-import { listDraftEvidence } from '@/services/evidence/evidenceService';
 import { getSupportActivitiesForVentureActivity } from '@/services/ventures/ventureActivityService';
 import { toTimelineRow } from '@/services/ventures/timeline';
-import { SubmissionPanel } from '@/components/student/SubmissionPanel';
 import { SubmissionHistory } from '@/components/venture/SubmissionHistory';
 import { durationInDays, formatDate, formatDateRange, windowState } from '@/lib/utils/dates';
 import { isValidObjectId } from '@/lib/utils/ids';
@@ -38,12 +45,11 @@ export default async function StudentActivityPage({ params }: { params: Promise<
 
   const row = toTimelineRow(entry);
 
-  const [history, supports, draftEvidence] = await Promise.all([
+  const [history, supports] = await Promise.all([
+    // Work submitted under the retired in-app flow. Shown when it exists so
+    // nothing a student handed in, or any comment on it, disappears.
     getSubmissionHistory(id),
     getSupportActivitiesForVentureActivity(context.activity._id.toString()),
-    // Files staged for the *next* attempt. Rendered on the server so a student
-    // who uploads and then closes the tab finds their evidence still attached.
-    listDraftEvidence(id),
   ]);
 
   const start = context.activity.startDate;
@@ -54,6 +60,8 @@ export default async function StudentActivityPage({ params }: { params: Promise<
   // the work itself.
   const totalDays = durationInDays(start, end);
   const elapsed = Math.min(Math.max(durationInDays(start, new Date()), 0), totalDays);
+
+  const presented = row.presentationReceivedAt !== null || row.status === 'COMPLETED';
 
   return (
     <>
@@ -67,7 +75,7 @@ export default async function StudentActivityPage({ params }: { params: Promise<
             icon={window === 'OPEN' ? CheckCircle2 : Timer}
           >
             {window === 'OPEN'
-              ? 'Submission window open'
+              ? 'Activity window open'
               : window === 'BEFORE'
                 ? 'Window not open yet'
                 : 'Window closed'}
@@ -84,140 +92,151 @@ export default async function StudentActivityPage({ params }: { params: Promise<
         }
       />
 
-      {/* The two rules that decide what a student can do next, stated once, at
-          the top: who must approve, and how many attempts are left. */}
-      <div className="mb-5 grid gap-4 lg:grid-cols-2">
-        <DualReviewPanel
-          facultyStatus={row.facultyReviewStatus}
-          mentorStatus={row.mentorReviewStatus}
-          overall={row.uiState}
+      {/* What this stage asks of the student, stated once at the top: present,
+          put the deck in the shared folder, then wait for feedback. */}
+      <Card className="mb-5">
+        <CardHeader
+          title="Your presentation"
+          description="Present your work for this stage and put your presentation in the shared Drive folder. The stage completes once you have been given feedback on it."
+          icon={Presentation}
+          action={<ActivityStatusBadge state={row.uiState} />}
         />
+        <CardBody className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="type-secondary flex items-start gap-2">
+            {presented ? (
+              <CheckCircle2
+                className="text-success-soft-foreground mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
+            ) : (
+              <Clock className="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            )}
+            <span>
+              {row.status === 'COMPLETED' ? (
+                <>
+                  <span className="text-foreground font-medium">Stage completed</span>
+                  {row.completedAt ? ` on ${formatDate(row.completedAt)}` : ''}.
+                </>
+              ) : row.presentationReceivedAt ? (
+                <>
+                  <span className="text-foreground font-medium">Presentation received</span> on{' '}
+                  {formatDate(row.presentationReceivedAt)}. Feedback is next.
+                </>
+              ) : (
+                <>
+                  <span className="text-foreground font-medium">Not received yet.</span> Your
+                  programme office marks it received once your presentation is in the folder.
+                </>
+              )}
+            </span>
+          </p>
 
-        <div className="surface-card rounded-card flex flex-col justify-center gap-2.5 px-4 py-3">
-          <span className="type-overline">Attempts</span>
-          <AttemptMeter used={row.attemptsUsed} max={row.maxAttempts} />
-          {row.blockedReason ? (
-            <p className="type-caption">{row.blockedReason}</p>
+          {row.presentationFolderUrl ? (
+            <a
+              href={row.presentationFolderUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            >
+              <FolderOpen className="size-4" aria-hidden="true" />
+              Open presentation folder
+              <ExternalLink className="size-3.5" aria-hidden="true" />
+            </a>
           ) : (
-            <p className="type-caption">
-              Every attempt and every comment is kept — nothing is overwritten.
+            <p className="type-caption shrink-0">
+              The folder link will appear here once it is shared.
             </p>
           )}
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-3">
         <StatTile label="Window" value={formatDateRange(row.startDate, row.endDate)} />
         <StatTile label="Duration" value={`${row.durationDays} days`} hint="Set on the activity" />
         <StatTile
-          label="Attempts remaining"
-          value={row.attemptsRemaining}
-          hint={`${row.attemptsUsed} of ${row.maxAttempts} used`}
-          tone={
-            row.attemptsRemaining === 0
-              ? 'danger'
-              : row.attemptsRemaining === 1
-                ? 'warning'
-                : 'neutral'
+          label="Presentation"
+          value={presented ? 'Received' : 'Pending'}
+          hint={
+            row.presentationReceivedAt
+              ? formatDate(row.presentationReceivedAt)
+              : presented
+                ? undefined
+                : 'Not in the folder yet'
           }
-        />
-        <StatTile
-          label="Evidence"
-          value={row.evidenceRequired ? 'Required' : 'Optional'}
-          hint={row.evidenceRequired ? 'Attach before submitting' : 'Attach if it helps'}
+          tone={presented ? 'positive' : 'neutral'}
         />
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <div className="space-y-5">
-          <SubmissionPanel row={serialize(row)} draftEvidence={serialize(draftEvidence)} />
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <Card>
+          <CardHeader
+            title="Schedule"
+            description="Where today sits in this activity's window."
+            icon={CalendarRange}
+          />
+          <CardBody className="space-y-2.5">
+            <MeterBar
+              value={window === 'AFTER' ? totalDays : elapsed}
+              max={totalDays}
+              tone={window === 'AFTER' ? 'danger' : window === 'OPEN' ? 'primary' : 'neutral'}
+              label="Window elapsed"
+            />
+            <dl className="type-secondary grid grid-cols-2 gap-2">
+              <div>
+                <dt className="type-overline">Opens</dt>
+                <dd className="text-foreground mt-0.5 font-medium">{formatDate(start)}</dd>
+              </div>
+              <div>
+                <dt className="type-overline">Closes</dt>
+                <dd className="text-foreground mt-0.5 font-medium">{formatDate(end)}</dd>
+              </div>
+            </dl>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="Required support activities"
+            description="These feed this stage of your venture."
+            icon={HeartHandshake}
+          />
+          {supports.length === 0 ? (
+            <EmptyState
+              size="sm"
+              title="Nothing mapped"
+              description="No support activities are linked to this stage."
+            />
+          ) : (
+            <CardBody>
+              <ul className="space-y-2">
+                {supports.map((support) => (
+                  <li
+                    key={support._id.toString()}
+                    className="surface-sunken rounded-control border px-3 py-2"
+                  >
+                    <p className="text-[13px] font-medium">
+                      <span className="font-mono text-xs">{support.activityCode}</span>{' '}
+                      {support.name}
+                    </p>
+                    {support.description ? (
+                      <p className="type-caption mt-0.5">{support.description}</p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </CardBody>
+          )}
+        </Card>
+      </div>
+
+      {history.length > 0 ? (
+        <div className="mt-5">
           <SubmissionHistory
             entries={serialize(history)}
-            emptyMessage="You have not submitted anything for this activity yet."
+            emptyMessage="Nothing was submitted for this activity."
           />
         </div>
-
-        <div className="space-y-5">
-          <Card>
-            <CardHeader
-              title="Schedule"
-              description="Where today sits in this activity's window."
-              icon={CalendarRange}
-            />
-            <CardBody className="space-y-2.5">
-              <MeterBar
-                value={window === 'AFTER' ? totalDays : elapsed}
-                max={totalDays}
-                tone={window === 'AFTER' ? 'danger' : window === 'OPEN' ? 'primary' : 'neutral'}
-                label="Window elapsed"
-              />
-              <dl className="type-secondary grid grid-cols-2 gap-2">
-                <div>
-                  <dt className="type-overline">Opens</dt>
-                  <dd className="text-foreground mt-0.5 font-medium">{formatDate(start)}</dd>
-                </div>
-                <div>
-                  <dt className="type-overline">Closes</dt>
-                  <dd className="text-foreground mt-0.5 font-medium">{formatDate(end)}</dd>
-                </div>
-              </dl>
-              <p className="type-caption">
-                The window is advisory — a late submission is still accepted and still needs both
-                approvals.
-              </p>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Required support activities"
-              description="These feed this stage of your venture."
-              icon={HeartHandshake}
-            />
-            {supports.length === 0 ? (
-              <EmptyState
-                size="sm"
-                title="Nothing mapped"
-                description="No support activities are linked to this stage."
-              />
-            ) : (
-              <CardBody>
-                <ul className="space-y-2">
-                  {supports.map((support) => (
-                    <li
-                      key={support._id.toString()}
-                      className="surface-sunken rounded-control border px-3 py-2"
-                    >
-                      <p className="text-[13px] font-medium">
-                        <span className="font-mono text-xs">{support.activityCode}</span>{' '}
-                        {support.name}
-                      </p>
-                      {support.description ? (
-                        <p className="type-caption mt-0.5">{support.description}</p>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </CardBody>
-            )}
-          </Card>
-
-          {row.completedAt ? (
-            <Card>
-              <CardBody className="flex items-start gap-2.5">
-                <span className="bg-success-soft text-success-soft-foreground inline-flex size-8 shrink-0 items-center justify-center rounded-md">
-                  <CheckCircle2 className="size-4" aria-hidden="true" />
-                </span>
-                <p className="type-secondary">
-                  <span className="text-foreground font-medium">Completed</span> on{' '}
-                  {formatDate(row.completedAt)}, once both your faculty reviewer and your industry
-                  mentor approved the same attempt.
-                </p>
-              </CardBody>
-            </Card>
-          ) : null}
-        </div>
-      </div>
+      ) : null}
     </>
   );
 }

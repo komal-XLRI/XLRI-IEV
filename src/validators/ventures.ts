@@ -23,8 +23,6 @@ export const createVentureActivitySchema = z
     order: z.coerce.number().int().min(1).max(99),
     startDate: dateSchema,
     endDate: dateSchema,
-    maxAttempts: z.coerce.number().int().min(1).max(10),
-    evidenceRequired: z.coerce.boolean().default(true),
     status: z.enum(CONTENT_STATUSES).default('ACTIVE'),
   })
   .refine((v) => v.endDate.getTime() >= v.startDate.getTime(), {
@@ -40,14 +38,40 @@ export const updateVentureActivitySchema = z
     order: z.coerce.number().int().min(1).max(99).optional(),
     startDate: dateSchema.optional(),
     endDate: dateSchema.optional(),
-    maxAttempts: z.coerce.number().int().min(1).max(10).optional(),
-    evidenceRequired: z.coerce.boolean().optional(),
     status: z.enum(CONTENT_STATUSES).optional(),
   })
   .refine((v) => !v.startDate || !v.endDate || v.endDate.getTime() >= v.startDate.getTime(), {
     message: 'End date must be on or after the start date',
     path: ['endDate'],
   });
+
+// ------------------------------------------------------ Presentations ----
+
+/**
+ * The stage's shared Drive folder. Blank clears it. Only https links are
+ * accepted: the link is rendered as an anchor for students, so a javascript:
+ * or data: URL must never get this far.
+ */
+export const presentationFolderSchema = z.object({
+  ventureActivityId: objectId,
+  presentationFolderUrl: z
+    .string()
+    .trim()
+    .max(2000)
+    .refine((v) => v === '' || /^https:\/\/\S+$/i.test(v), {
+      message: 'Paste the full https:// link to the folder',
+    })
+    .transform((v) => (v === '' ? null : v)),
+});
+
+/**
+ * Replaces the full set of received presentations for one venture activity:
+ * every record listed is marked received, every record not listed is cleared.
+ */
+export const presentationsReceivedSchema = z.object({
+  ventureActivityId: objectId,
+  receivedRecordIds: z.array(objectId).max(2000),
+});
 
 // ------------------------------------------------- Support activities ----
 

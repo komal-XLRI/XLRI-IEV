@@ -5,7 +5,7 @@ import {
   resolveActivityStatus,
 } from '@/lib/rules/dualReview';
 
-const base = { attemptsUsed: 1, maxAttempts: 3 };
+const base = { attemptsUsed: 1 };
 
 describe('mandatory dual review', () => {
   it('does not complete on faculty approval alone', () => {
@@ -52,7 +52,6 @@ describe('mandatory dual review', () => {
     expect(
       resolveActivityStatus({
         attemptsUsed: 0,
-        maxAttempts: 3,
         facultyReviewStatus: 'PENDING',
         mentorReviewStatus: 'PENDING',
       }),
@@ -81,7 +80,7 @@ describe('revision and rejection', () => {
     ).toBe('REVISION_REQUIRED');
   });
 
-  it('treats a rejection as ending the attempt', () => {
+  it('treats a rejection as sending the work back', () => {
     expect(
       resolveActivityStatus({
         ...base,
@@ -91,26 +90,14 @@ describe('revision and rejection', () => {
     ).toBe('REVISION_REQUIRED');
   });
 
-  it('reaches MAX_ATTEMPTS_REACHED when the final attempt is sent back', () => {
+  it('never runs out — a late submission sent back is still a revision', () => {
     expect(
       resolveActivityStatus({
-        attemptsUsed: 3,
-        maxAttempts: 3,
+        attemptsUsed: 10,
         facultyReviewStatus: 'REVISION_REQUIRED',
         mentorReviewStatus: 'APPROVED',
       }),
-    ).toBe('MAX_ATTEMPTS_REACHED');
-  });
-
-  it('still completes on the final attempt when both approve', () => {
-    expect(
-      resolveActivityStatus({
-        attemptsUsed: 3,
-        maxAttempts: 3,
-        facultyReviewStatus: 'APPROVED',
-        mentorReviewStatus: 'APPROVED',
-      }),
-    ).toBe('COMPLETED');
+    ).toBe('REVISION_REQUIRED');
   });
 });
 

@@ -22,7 +22,7 @@ const models = await import('@/models');
 const { createUser } = await import('@/services/users/userService');
 const { createStudentVenture, getVentureProgress } =
   await import('@/services/ventures/studentVentureService');
-const { createSubmission } = await import('@/services/submissions/submissionService');
+const { writeLegacySubmission } = await import('../support/legacySubmission');
 const { createReview } = await import('@/services/reviews/reviewService');
 const { saveAttendance } = await import('@/services/ventures/attendanceService');
 const { getStudentDossier } = await import('@/services/students/studentDossier');
@@ -138,8 +138,15 @@ beforeAll(async () => {
 
     if (venture === ventureId) firstActivityId = first.activity._id.toString();
 
+    const submission = await writeLegacySubmission(
+      first.recordId,
+      owner,
+      `Body of the ${label} submission.`,
+      `${label} submission`,
+    );
+
     await models.Evidence.create({
-      submissionId: null,
+      submissionId: submission.submissionId,
       studentVentureActivityId: first.recordId,
       fileName: `${label}.pdf`,
       fileUrl: `https://res.cloudinary.com/demo/raw/upload/${SUFFIX}/${label}.pdf`,
@@ -150,15 +157,6 @@ beforeAll(async () => {
       uploadedBy: owner,
       uploadedAt: new Date(),
     });
-
-    const submission = await createSubmission(
-      {
-        studentVentureActivityId: first.recordId,
-        title: `${label} submission`,
-        content: `Body of the ${label} submission.`,
-      },
-      owner,
-    );
 
     await createReview(
       { submissionId: submission.submissionId, status: 'APPROVED', comments: `${label} verdict` },

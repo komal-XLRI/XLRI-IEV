@@ -1,9 +1,17 @@
 import Link from 'next/link';
-import { CalendarRange, CheckCircle2, Layers, Paperclip, RefreshCw } from 'lucide-react';
+import { CalendarRange, FolderOpen, Layers, Presentation } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { MeterBar } from '@/components/ui/Chart';
 import { formatDate } from '@/lib/utils/dates';
 import { cn } from '@/lib/utils/cn';
+import { PRESENTATION_STAGE_LABELS, type PresentationStageState } from '@/lib/rules/presentations';
+
+const STAGE_TONE: Record<PresentationStageState, 'muted' | 'info' | 'warning' | 'success'> = {
+  NO_STUDENTS: 'muted',
+  COLLECTING: 'warning',
+  AWAITING_FEEDBACK: 'info',
+  COMPLETED: 'success',
+};
 
 export interface VentureActivityView {
   id: string;
@@ -13,8 +21,11 @@ export interface VentureActivityView {
   startDate: string | null;
   endDate: string | null;
   durationDays: number;
-  maxAttempts: number;
-  evidenceRequired: boolean;
+  /** The stage's shared Drive folder for presentations, if set. */
+  presentationFolderUrl: string | null;
+  /** Students whose presentation is confirmed in the folder. */
+  presentationsReceived: number;
+  presentationStage: PresentationStageState;
   status: string;
   supportCodes: string[];
   /** Cohort progress; null when no student has reached this activity yet. */
@@ -36,9 +47,8 @@ const WINDOW_BADGE = {
  * One Venture Activity, laid out so the whole definition can be read without
  * scrolling a table sideways.
  *
- * Every figure is read from the record — duration and the attempt limit are
- * per-activity configuration, so nothing here assumes the usual 12–15 days or
- * three attempts.
+ * Every figure is read from the record — duration is per-activity
+ * configuration, so nothing here assumes the usual 12–15 days.
  */
 export function VentureActivityCard({ activity }: { activity: VentureActivityView }) {
   const window = activity.windowState ? WINDOW_BADGE[activity.windowState] : null;
@@ -102,35 +112,47 @@ export function VentureActivityCard({ activity }: { activity: VentureActivityVie
 
           <div>
             <dt className="type-overline flex items-center gap-1">
-              <RefreshCw className="size-3" aria-hidden="true" />
-              Maximum attempts
+              <Presentation className="size-3" aria-hidden="true" />
+              Presentations
             </dt>
-            <dd className="mt-0.5 text-[13px] font-medium tabular-nums">{activity.maxAttempts}</dd>
+            <dd className="mt-0.5 text-[13px] font-medium tabular-nums">
+              {activity.total > 0 ? (
+                `${activity.presentationsReceived}/${activity.total} received`
+              ) : (
+                <span className="text-muted-foreground">No students yet</span>
+              )}
+            </dd>
           </div>
 
           <div>
             <dt className="type-overline flex items-center gap-1">
-              <Paperclip className="size-3" aria-hidden="true" />
-              Evidence
+              <FolderOpen className="size-3" aria-hidden="true" />
+              Drive folder
             </dt>
             <dd className="mt-0.5 text-[13px] font-medium">
-              {activity.evidenceRequired ? 'Required' : 'Optional'}
+              {activity.presentationFolderUrl ? (
+                <a
+                  href={activity.presentationFolderUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Open folder
+                </a>
+              ) : (
+                <span className="text-muted-foreground">Not set</span>
+              )}
             </dd>
           </div>
         </dl>
 
-        {/* Both approvals are mandatory for every activity — stating it on each
-            card is cheaper than a reader inferring it from the review screens. */}
-        <div className="surface-sunken rounded-control flex flex-wrap items-center gap-x-4 gap-y-1 border px-3 py-2">
-          <span className="type-overline">Review</span>
-          <span className="text-success-soft-foreground inline-flex items-center gap-1 text-[12.5px] font-medium">
-            <CheckCircle2 className="size-3.5" aria-hidden="true" />
-            Faculty required
-          </span>
-          <span className="text-success-soft-foreground inline-flex items-center gap-1 text-[12.5px] font-medium">
-            <CheckCircle2 className="size-3.5" aria-hidden="true" />
-            Mentor required
-          </span>
+        {/* The stage completes on presentations plus feedback — stated on each
+            card so nobody reads "all received" as "done". */}
+        <div className="surface-sunken rounded-control flex flex-wrap items-center gap-x-3 gap-y-1 border px-3 py-2">
+          <span className="type-overline">Stage</span>
+          <Badge tone={STAGE_TONE[activity.presentationStage]}>
+            {PRESENTATION_STAGE_LABELS[activity.presentationStage]}
+          </Badge>
         </div>
 
         <div>
@@ -205,7 +227,7 @@ export function VentureActivityCard({ activity }: { activity: VentureActivityVie
           href={`/admin/venture-activities/${activity.id}`}
           className="text-primary text-[13px] font-medium hover:underline"
         >
-          Edit activity
+          Presentations &amp; settings
         </Link>
       </footer>
     </article>

@@ -18,6 +18,7 @@
     "seed:demo": "tsx --tsconfig tsconfig.scripts.json scripts/seed-demo.ts",
     "seed:cohort": "tsx --tsconfig tsconfig.scripts.json scripts/seed-cohort.ts",
     "migrate:attendance": "tsx --tsconfig tsconfig.scripts.json scripts/migrate-venture-attendance.ts",
+    "migrate:attempts": "tsx --tsconfig tsconfig.scripts.json scripts/migrate-remove-attempts.ts",
     "verify": "npm run typecheck && npm run lint && npm run test",
     "check:smtp": "tsx --tsconfig tsconfig.scripts.json scripts/check-smtp.ts"
   },

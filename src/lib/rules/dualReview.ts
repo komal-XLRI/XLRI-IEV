@@ -12,21 +12,20 @@ export interface DualReviewInput {
   mentorReviewStatus: ReviewStatus;
   /** Submissions made so far. */
   attemptsUsed: number;
-  maxAttempts: number;
 }
 
-/** A verdict that sends the work back — the attempt has failed. */
+/** A verdict that sends the work back. */
 function isNegative(status: ReviewStatus): boolean {
   return status === 'REVISION_REQUIRED' || status === 'REJECTED';
 }
 
 export function resolveActivityStatus(input: DualReviewInput): StudentActivityStatus {
-  const { facultyReviewStatus, mentorReviewStatus, attemptsUsed, maxAttempts } = input;
+  const { facultyReviewStatus, mentorReviewStatus, attemptsUsed } = input;
 
-  // A negative verdict from either reviewer ends the attempt immediately —
+  // A negative verdict from either reviewer sends the work back immediately —
   // there is no point waiting for the second reviewer to agree.
   if (isNegative(facultyReviewStatus) || isNegative(mentorReviewStatus)) {
-    return attemptsUsed >= maxAttempts ? 'MAX_ATTEMPTS_REACHED' : 'REVISION_REQUIRED';
+    return 'REVISION_REQUIRED';
   }
 
   if (facultyReviewStatus === 'APPROVED' && mentorReviewStatus === 'APPROVED') {

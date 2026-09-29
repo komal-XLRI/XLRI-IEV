@@ -34,9 +34,9 @@ describe('sequential progression', () => {
     expect(isUnlocked(entries('COMPLETED', 'UNDER_REVIEW', 'NOT_STARTED'), 3)).toBe(false);
   });
 
-  it('does not unlock the next activity when the current one hit the attempt ceiling', () => {
-    // Requires admin intervention rather than silently letting the student past.
-    expect(isUnlocked(entries('MAX_ATTEMPTS_REACHED', 'NOT_STARTED'), 2)).toBe(false);
+  it('does not unlock the next activity on a received presentation alone', () => {
+    // A stage completes when feedback is given, not when the deck arrives.
+    expect(isUnlocked(entries('PRESENTATION_RECEIVED', 'NOT_STARTED'), 2)).toBe(false);
   });
 
   it('sorts by order rather than trusting input order', () => {

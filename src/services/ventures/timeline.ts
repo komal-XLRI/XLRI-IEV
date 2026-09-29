@@ -4,7 +4,7 @@ import type { TimelineRow } from '@/types/progress';
 
 /** Flattens the progress read model into the client-safe timeline shape. */
 export function toTimelineRow(entry: VentureActivityProgress): TimelineRow {
-  const { activity, record, attempt } = entry;
+  const { activity, record } = entry;
 
   return {
     recordId: entry.recordId,
@@ -16,8 +16,9 @@ export function toTimelineRow(entry: VentureActivityProgress): TimelineRow {
     startDate: activity.startDate.toISOString(),
     endDate: activity.endDate.toISOString(),
     durationDays: activity.durationDays,
-    maxAttempts: activity.maxAttempts,
-    evidenceRequired: activity.evidenceRequired,
+
+    presentationFolderUrl: activity.presentationFolderUrl ?? null,
+    presentationReceivedAt: record.presentationReceivedAt?.toISOString() ?? null,
 
     status: record.status,
     uiState: entry.uiState,
@@ -27,12 +28,7 @@ export function toTimelineRow(entry: VentureActivityProgress): TimelineRow {
     mentorReviewStatus: record.mentorReviewStatus,
     reviewSummary: entry.reviewSummary,
 
-    attemptsUsed: attempt.attemptsUsed,
-    attemptsRemaining: attempt.attemptsRemaining,
-    nextAttemptNumber: attempt.nextAttemptNumber,
-    submissionType: attempt.submissionType,
-    canSubmit: attempt.canSubmit,
-    blockedReason: attempt.reason,
+    submissionsMade: record.attemptNumber,
 
     currentSubmissionId: record.currentSubmissionId?.toString() ?? null,
     completedAt: record.completedAt?.toISOString() ?? null,

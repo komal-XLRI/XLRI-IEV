@@ -1,5 +1,5 @@
 /**
- * `MAX_ATTEMPTS_REACHED` -> `Max attempts reached`.
+ * `PRESENTATION_RECEIVED` -> `Presentation received`.
  *
  * Lives in `lib` rather than beside the export code because the same
  * transformation is needed in the browser — a client component rendering a

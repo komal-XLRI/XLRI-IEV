@@ -28,7 +28,6 @@ interface ReviewQueueRow {
   activityCode: string;
   activityName: string;
   attemptNumber: number;
-  maxAttempts: number;
   myVerdict: string;
   otherVerdict: string;
   activityStatus: string;
@@ -55,14 +54,6 @@ export const myReviewQueueDataset = defineDataset<ReviewQueueRow>({
       align: 'right',
       value: (r) => r.attemptNumber,
       width: 8,
-    },
-    {
-      key: 'maxAttempts',
-      header: 'Max',
-      type: 'number',
-      align: 'right',
-      value: (r) => r.maxAttempts,
-      width: 7,
     },
     { key: 'myVerdict', header: 'My verdict', value: (r) => humanise(r.myVerdict), width: 14 },
     {
@@ -96,7 +87,6 @@ export const myReviewQueueDataset = defineDataset<ReviewQueueRow>({
       activityCode: item.activity.activityCode,
       activityName: item.activity.name,
       attemptNumber: item.record.attemptNumber,
-      maxAttempts: item.activity.maxAttempts,
       myVerdict: item.myReviewStatus,
       otherVerdict: item.otherReviewStatus,
       activityStatus: item.record.status,
@@ -131,9 +121,7 @@ interface MyProgressRow {
   status: string;
   facultyVerdict: string;
   mentorVerdict: string;
-  attemptsUsed: number;
-  maxAttempts: number;
-  attemptsRemaining: number;
+  presentationReceivedAt: Date | null;
   startDate: Date;
   endDate: Date;
   durationDays: number;
@@ -163,28 +151,11 @@ export const myProgressDataset = defineDataset<MyProgressRow>({
       width: 15,
     },
     {
-      key: 'attemptsUsed',
-      header: 'Attempts used',
-      type: 'number',
-      align: 'right',
-      value: (r) => r.attemptsUsed,
-      width: 12,
-    },
-    {
-      key: 'maxAttempts',
-      header: 'Max attempts',
-      type: 'number',
-      align: 'right',
-      value: (r) => r.maxAttempts,
-      width: 11,
-    },
-    {
-      key: 'attemptsRemaining',
-      header: 'Remaining',
-      type: 'number',
-      align: 'right',
-      value: (r) => r.attemptsRemaining,
-      width: 10,
+      key: 'presentationReceivedAt',
+      header: 'Presentation received',
+      type: 'datetime',
+      value: (r) => r.presentationReceivedAt,
+      width: 18,
     },
     { key: 'startDate', header: 'Start', type: 'date', value: (r) => r.startDate, width: 12 },
     { key: 'endDate', header: 'End', type: 'date', value: (r) => r.endDate, width: 12 },
@@ -216,9 +187,7 @@ export const myProgressDataset = defineDataset<MyProgressRow>({
       status: entry.uiState,
       facultyVerdict: entry.record.facultyReviewStatus,
       mentorVerdict: entry.record.mentorReviewStatus,
-      attemptsUsed: entry.attempt.attemptsUsed,
-      maxAttempts: entry.activity.maxAttempts,
-      attemptsRemaining: entry.attempt.attemptsRemaining,
+      presentationReceivedAt: entry.record.presentationReceivedAt ?? null,
       startDate: entry.activity.startDate,
       endDate: entry.activity.endDate,
       durationDays: entry.activity.durationDays,

@@ -190,5 +190,3 @@ export const EXPERT_WORKSHOP_CODE = 'A7';
 /** Programme guideline for Venture Activity duration — advisory, not enforced. */
 export const VENTURE_ACTIVITY_GUIDELINE_MIN_DAYS = 12;
 export const VENTURE_ACTIVITY_GUIDELINE_MAX_DAYS = 15;
-
-export const DEFAULT_MAX_ATTEMPTS = 3;

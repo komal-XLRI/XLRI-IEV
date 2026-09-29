@@ -89,10 +89,9 @@ export async function getHeaderAlerts(user: {
   const alerts: HeaderAlert[] = [];
 
   if (user.role === 'ADMIN') {
-    const [awaitingReview, unassigned, exhausted] = await Promise.all([
+    const [awaitingReview, unassigned] = await Promise.all([
       StudentVentureActivity.countDocuments({ status: 'UNDER_REVIEW' }).exec(),
       StudentVenture.countDocuments({ $or: [{ facultyId: null }, { mentorId: null }] }).exec(),
-      StudentVentureActivity.countDocuments({ status: 'MAX_ATTEMPTS_REACHED' }).exec(),
     ]);
 
     if (awaitingReview > 0) {
@@ -112,16 +111,6 @@ export async function getHeaderAlerts(user: {
         detail: 'A venture cannot be reviewed until both a faculty and a mentor are assigned.',
         href: '/admin/ventures',
         tone: 'warning',
-      });
-    }
-
-    if (exhausted > 0) {
-      alerts.push({
-        id: 'max-attempts',
-        title: `${exhausted} activit${exhausted === 1 ? 'y has' : 'ies have'} run out of attempts`,
-        detail: 'These students are blocked until the attempt limit is raised.',
-        href: '/admin/reviews',
-        tone: 'danger',
       });
     }
 
@@ -151,37 +140,8 @@ export async function getHeaderAlerts(user: {
       : [];
   }
 
-  const [revisions, blocked] = await Promise.all([
-    StudentVentureActivity.countDocuments({
-      studentId: user.userId,
-      status: 'REVISION_REQUIRED',
-    }).exec(),
-    StudentVentureActivity.countDocuments({
-      studentId: user.userId,
-      status: 'MAX_ATTEMPTS_REACHED',
-    }).exec(),
-  ]);
-
-  if (revisions > 0) {
-    alerts.push({
-      id: 'revisions',
-      title: `${revisions} activit${revisions === 1 ? 'y needs' : 'ies need'} revision`,
-      detail: 'A reviewer asked for changes. Submit a revised attempt to continue.',
-      href: '/student',
-      tone: 'warning',
-    });
-  }
-
-  if (blocked > 0) {
-    alerts.push({
-      id: 'blocked',
-      title: `${blocked} activit${blocked === 1 ? 'y has' : 'ies have'} no attempts left`,
-      detail: 'Contact the programme office — an administrator has to raise the limit.',
-      href: '/student',
-      tone: 'danger',
-    });
-  }
-
+  // Students no longer submit work in the app — presentations are collected
+  // by the programme office — so there is nothing a student must act on here.
   return alerts;
 }
 
@@ -196,7 +156,6 @@ export interface PendingReviewAttempt {
   activityCode: string;
   activityName: string;
   attemptNumber: number;
-  maxAttempts: number;
   facultyReviewStatus: ReviewStatus;
   mentorReviewStatus: ReviewStatus;
   /** Who a verdict would be attributed to. Null when nobody is assigned. */
@@ -242,8 +201,8 @@ export async function getPendingReviewAttempts(limit = 25): Promise<PendingRevie
       ],
     })
     .populate<{
-      ventureActivityId: { activityCode: string; name: string; maxAttempts: number } | null;
-    }>('ventureActivityId', 'activityCode name maxAttempts')
+      ventureActivityId: { activityCode: string; name: string } | null;
+    }>('ventureActivityId', 'activityCode name')
     .sort({ updatedAt: 1 })
     .limit(limit)
     .lean()
@@ -257,7 +216,6 @@ export async function getPendingReviewAttempts(limit = 25): Promise<PendingRevie
     activityCode: record.ventureActivityId?.activityCode ?? '—',
     activityName: record.ventureActivityId?.name ?? '—',
     attemptNumber: record.attemptNumber,
-    maxAttempts: record.ventureActivityId?.maxAttempts ?? 0,
     facultyReviewStatus: record.facultyReviewStatus,
     mentorReviewStatus: record.mentorReviewStatus,
     facultyName: record.studentVentureId?.facultyId?.name ?? null,
@@ -284,7 +242,7 @@ export async function getActivityCalendar() {
   await connectToDatabase();
 
   const activities = await VentureActivity.find({ status: 'ACTIVE' })
-    .select('activityCode name order startDate endDate durationDays maxAttempts termId')
+    .select('activityCode name order startDate endDate durationDays termId')
     .sort({ order: 1 })
     .lean()
     .exec();

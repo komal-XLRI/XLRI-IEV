@@ -540,7 +540,7 @@ describe('what a student sees', () => {
 });
 
 describe('attendance changes no rule', () => {
-  it('leaves progression, attempts and review state untouched when marked absent', async () => {
+  it('leaves progression, presentation and review state untouched when marked absent', async () => {
     const before = await getVentureProgress(ventureOneId);
 
     await saveAttendance({
@@ -563,15 +563,16 @@ describe('attendance changes no rule', () => {
       expect(row.record.attemptNumber).toBe(previous.record.attemptNumber);
       expect(row.record.facultyReviewStatus).toBe(previous.record.facultyReviewStatus);
       expect(row.record.mentorReviewStatus).toBe(previous.record.mentorReviewStatus);
-      expect(row.attempt.canSubmit).toBe(previous.attempt.canSubmit);
-      expect(row.attempt.attemptsRemaining).toBe(previous.attempt.attemptsRemaining);
+      expect(row.record.presentationReceivedAt ?? null).toEqual(
+        previous.record.presentationReceivedAt ?? null,
+      );
       expect(row.reviewSummary).toBe(previous.reviewSummary);
     });
   });
 
-  it('still allows a submission from a student marked absent', async () => {
+  it('leaves the first activity open to a student marked absent', async () => {
     const progress = await getVentureProgress(ventureOneId);
-    expect(progress[0]!.attempt.canSubmit).toBe(true);
+    expect(progress[0]!.unlocked).toBe(true);
   });
 
   it('does not touch the progress record at all', async () => {

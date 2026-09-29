@@ -52,7 +52,7 @@ export default async function StudentSupportPage() {
       <Card>
         <CardHeader
           title="Your support activities"
-          description="These are participation records — they carry no attempt limit and no dual-review requirement."
+          description="These are participation records — they carry no presentation or dual-review requirement."
         />
         <ul className="divide-y">
           {withMappings.map((row) => (

@@ -8,7 +8,6 @@ import type { DatasetDefinition } from './datasets/types';
 
 import {
   activityCompletionDataset,
-  attemptsDataset,
   reviewLogDataset,
   reviewSummaryDataset,
   studentProgressDataset,
@@ -54,7 +53,6 @@ const DATASETS: Record<string, DatasetDefinition<any>> = {
   [ventureProgressDataset.key]: ventureProgressDataset,
   [activityCompletionDataset.key]: activityCompletionDataset,
   [reviewSummaryDataset.key]: reviewSummaryDataset,
-  [attemptsDataset.key]: attemptsDataset,
   [reviewLogDataset.key]: reviewLogDataset,
 
   // Administrative records

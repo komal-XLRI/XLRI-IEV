@@ -17,7 +17,8 @@ const models = await import('@/models');
 const { createUser } = await import('@/services/users/userService');
 const { createStudentVenture, getVentureProgress } =
   await import('@/services/ventures/studentVentureService');
-const { createSubmission } = await import('@/services/submissions/submissionService');
+const { setPresentationsReceived } = await import('@/services/ventures/presentationService');
+const { writeLegacySubmission } = await import('../support/legacySubmission');
 const { createReview } = await import('@/services/reviews/reviewService');
 const { getPendingReviewAttempts } = await import('@/services/dashboard/dashboardService');
 
@@ -31,9 +32,7 @@ let otherFacultyId: string;
 let ventureId: string;
 let firstActivityRecordId: string;
 let secondActivityRecordId: string;
-
-/** Read from the seeded activities rather than assumed — the admin can change it. */
-let maxAttempts: number;
+let adminId: string;
 
 beforeAll(async () => {
   await connectToDatabase();
@@ -98,30 +97,11 @@ beforeAll(async () => {
   const progress = await getVentureProgress(ventureId);
   firstActivityRecordId = progress[0]!.recordId;
   secondActivityRecordId = progress[1]!.recordId;
-  maxAttempts = progress[1]!.activity.maxAttempts;
-});
 
-/**
- * Stages one evidence file against a record, the way a completed upload does.
- *
- * The seeded activities all require evidence, and `createSubmission` now
- * refuses an attempt that has none — so a test about reviews still has to
- * satisfy the rule that guards submission.
- */
-async function stageEvidence(studentVentureActivityId: string) {
-  await models.Evidence.create({
-    submissionId: null,
-    studentVentureActivityId,
-    fileName: 'evidence.pdf',
-    fileUrl: `https://res.cloudinary.com/demo/raw/upload/${SUFFIX}/evidence.pdf`,
-    publicId: `iev-tracker/evidence/${studentVentureActivityId}/${SUFFIX}-${Date.now()}`,
-    fileType: 'application/pdf',
-    resourceType: 'raw',
-    fileSize: 1024,
-    uploadedBy: studentId,
-    uploadedAt: new Date(),
-  });
-}
+  const admin = await models.User.findOne({ role: 'ADMIN' }).select('_id').lean().exec();
+  if (!admin) throw new Error('Run `npm run seed` before the integration tests.');
+  adminId = admin._id.toString();
+});
 
 afterAll(async () => {
   // Leave the seeded reference data alone; remove only this run's fixtures.
@@ -173,34 +153,10 @@ describe('venture bootstrap', () => {
 describe('dual review over a real submission', () => {
   let submissionId: string;
 
-  it('accepts the first submission and computes attempt 1', async () => {
-    await stageEvidence(firstActivityRecordId);
-    const result = await createSubmission(
-      { studentVentureActivityId: firstActivityRecordId, content: 'Attempt one' },
-      studentId,
-    );
-
+  it('reviews a submission made under the old in-app flow', async () => {
+    const result = await writeLegacySubmission(firstActivityRecordId, studentId, 'Attempt one');
     expect(result.attemptNumber).toBe(1);
-    expect(result.submissionType).toBe('INITIAL');
     submissionId = result.submissionId;
-  });
-
-  it('refuses a second submission while the first is under review', async () => {
-    await expect(
-      createSubmission(
-        { studentVentureActivityId: firstActivityRecordId, content: 'Premature' },
-        studentId,
-      ),
-    ).rejects.toThrow(/under review/i);
-  });
-
-  it('refuses a submission from a different student', async () => {
-    await expect(
-      createSubmission(
-        { studentVentureActivityId: firstActivityRecordId, content: 'Not mine' },
-        facultyId,
-      ),
-    ).rejects.toThrow(/does not belong to you/i);
   });
 
   it('refuses a review from an unassigned faculty member', async () => {
@@ -299,96 +255,99 @@ describe('progression lock', () => {
     const locked = progress.filter((p) => p.uiState === 'LOCKED');
     expect(locked.length).toBeGreaterThan(0);
   });
-
-  it('refuses a submission for a locked activity', async () => {
-    const progress = await getVentureProgress(ventureId);
-    const locked = progress.find((p) => p.uiState === 'LOCKED');
-
-    await expect(
-      createSubmission(
-        { studentVentureActivityId: locked!.recordId, content: 'Skipping ahead' },
-        studentId,
-      ),
-    ).rejects.toThrow(/previous activity/i);
-  });
 });
 
-describe('attempt limit is enforced server-side', () => {
-  async function submitAndSendBack(expectedAttempt: number) {
-    await stageEvidence(secondActivityRecordId);
-    const submission = await createSubmission(
-      { studentVentureActivityId: secondActivityRecordId, content: `Attempt ${expectedAttempt}` },
-      studentId,
-    );
-    expect(submission.attemptNumber).toBe(expectedAttempt);
-
-    await createReview(
-      { submissionId: submission.submissionId, status: 'REVISION_REQUIRED', comments: 'Redo' },
-      { userId: facultyId, role: 'FACULTY' },
-    );
-
-    return submission;
-  }
-
-  it('allows exactly maxAttempts submissions, the last labelled FINAL', async () => {
-    for (let attempt = 1; attempt < maxAttempts; attempt += 1) {
-      await submitAndSendBack(attempt);
-    }
-    const last = await submitAndSendBack(maxAttempts);
-    expect(last.submissionType).toBe('FINAL');
-  });
-
-  it('marks the record MAX_ATTEMPTS_REACHED after the final attempt fails', async () => {
-    const record = await models.StudentVentureActivity.findById(secondActivityRecordId)
-      .lean()
-      .exec();
-    expect(record!.attemptNumber).toBe(maxAttempts);
-    expect(record!.status).toBe('MAX_ATTEMPTS_REACHED');
-  });
-
-  it('blocks the attempt after the limit', async () => {
-    await expect(
-      createSubmission(
-        { studentVentureActivityId: secondActivityRecordId, content: 'One too many' },
-        studentId,
-      ),
-    ).rejects.toThrow(new RegExp(`all ${maxAttempts} attempts`, 'i'));
-  });
-
-  it('preserved every earlier submission rather than overwriting', async () => {
-    const submissions = await models.VentureSubmission.find({
-      studentVentureActivityId: secondActivityRecordId,
-    })
-      .sort({ attemptNumber: 1 })
-      .lean()
-      .exec();
-
-    const expected = Array.from({ length: maxAttempts }, (_, i) => i + 1);
-    expect(submissions.map((s) => s.attemptNumber)).toEqual(expected);
-    expect(submissions.map((s) => s.content)).toEqual(expected.map((n) => `Attempt ${n}`));
-  });
-
-  it('preserved a review for every attempt', async () => {
-    const submissions = await models.VentureSubmission.find({
-      studentVentureActivityId: secondActivityRecordId,
+describe('presentations', () => {
+  // The checklist save replaces the whole set for an activity, and these suites
+  // run against a shared, seeded database — so every save here carries over the
+  // marks other students already have, and only ever moves this suite's record.
+  async function othersReceived(ventureActivityId: string): Promise<string[]> {
+    const rows = await models.StudentVentureActivity.find({
+      ventureActivityId,
+      studentVentureId: { $ne: ventureId },
+      presentationReceivedAt: { $ne: null },
     })
       .select('_id')
       .lean()
       .exec();
+    return rows.map((row) => row._id.toString());
+  }
 
-    const reviews = await models.Review.find({
-      submissionId: { $in: submissions.map((s) => s._id) },
-    })
+  async function activityOf(recordId: string): Promise<string> {
+    const record = await models.StudentVentureActivity.findById(recordId).lean().exec();
+    return record!.ventureActivityId.toString();
+  }
+
+  it('marks a presentation received and moves the record to PRESENTATION_RECEIVED', async () => {
+    const activityId = await activityOf(secondActivityRecordId);
+    const others = await othersReceived(activityId);
+
+    const result = await setPresentationsReceived(
+      activityId,
+      [...others, secondActivityRecordId],
+      adminId,
+    );
+    expect(result).toEqual({ marked: 1, cleared: 0 });
+
+    const record = await models.StudentVentureActivity.findById(secondActivityRecordId)
       .lean()
       .exec();
-
-    expect(reviews).toHaveLength(maxAttempts);
+    expect(record!.status).toBe('PRESENTATION_RECEIVED');
+    expect(record!.presentationReceivedAt).not.toBeNull();
+    expect(record!.presentationMarkedBy?.toString()).toBe(adminId);
   });
 
-  it('does not unlock the next activity from MAX_ATTEMPTS_REACHED', async () => {
+  it('does not complete the stage or unlock the next one on a presentation alone', async () => {
     const progress = await getVentureProgress(ventureId);
     const index = progress.findIndex((p) => p.recordId === secondActivityRecordId);
+    expect(progress[index]!.record.completedAt).toBeNull();
     const next = progress[index + 1];
     if (next) expect(next.uiState).toBe('LOCKED');
+  });
+
+  it('is idempotent — saving the same checklist again changes nothing', async () => {
+    const activityId = await activityOf(secondActivityRecordId);
+    const others = await othersReceived(activityId);
+
+    const result = await setPresentationsReceived(
+      activityId,
+      [...others, secondActivityRecordId],
+      adminId,
+    );
+    expect(result).toEqual({ marked: 0, cleared: 0 });
+  });
+
+  it('returns the record to NOT_STARTED when the mark is withdrawn', async () => {
+    const activityId = await activityOf(secondActivityRecordId);
+    const others = await othersReceived(activityId);
+
+    const result = await setPresentationsReceived(activityId, others, adminId);
+    expect(result).toEqual({ marked: 0, cleared: 1 });
+
+    const record = await models.StudentVentureActivity.findById(secondActivityRecordId)
+      .lean()
+      .exec();
+    expect(record!.status).toBe('NOT_STARTED');
+    expect(record!.presentationReceivedAt).toBeNull();
+  });
+
+  it('never un-presents a completed stage', async () => {
+    const activityId = await activityOf(firstActivityRecordId);
+    const others = await othersReceived(activityId);
+
+    await setPresentationsReceived(activityId, [...others, firstActivityRecordId], adminId);
+    const result = await setPresentationsReceived(activityId, others, adminId);
+    expect(result.cleared).toBe(0);
+
+    const after = await models.StudentVentureActivity.findById(firstActivityRecordId).lean().exec();
+    expect(after!.status).toBe('COMPLETED');
+    expect(after!.presentationReceivedAt).not.toBeNull();
+  });
+
+  it('refuses a record that is not on the activity', async () => {
+    const activityId = await activityOf(secondActivityRecordId);
+    await expect(
+      setPresentationsReceived(activityId, [firstActivityRecordId], adminId),
+    ).rejects.toThrow(/not on this venture activity/i);
   });
 });

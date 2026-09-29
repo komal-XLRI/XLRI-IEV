@@ -44,6 +44,13 @@ export interface IStudentVentureActivity {
   /** Submission currently awaiting review, if any. */
   currentSubmissionId?: Types.ObjectId | null;
 
+  /**
+   * When the administrator confirmed this student's presentation is in the
+   * activity's Drive folder, and who confirmed it. Null until then.
+   */
+  presentationReceivedAt?: Date | null;
+  presentationMarkedBy?: Types.ObjectId | null;
+
   startedAt?: Date | null;
   completedAt?: Date | null;
 
@@ -80,6 +87,9 @@ const studentVentureActivitySchema = new Schema<IStudentVentureActivity>(
     mentorReviewStatus: { type: String, required: true, enum: REVIEW_STATUSES, default: 'PENDING' },
 
     currentSubmissionId: { type: Schema.Types.ObjectId, ref: 'VentureSubmission', default: null },
+
+    presentationReceivedAt: { type: Date, default: null },
+    presentationMarkedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
 
     startedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },

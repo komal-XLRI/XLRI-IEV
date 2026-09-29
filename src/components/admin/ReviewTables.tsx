@@ -18,7 +18,6 @@ export interface PendingRow {
   activityCode: string;
   activityName: string;
   attemptNumber: number;
-  maxAttempts: number;
   facultyReviewStatus: ReviewStatus;
   mentorReviewStatus: ReviewStatus;
   facultyName: string | null;
@@ -98,12 +97,7 @@ export function PendingReviewTable({ rows }: { rows: PendingRow[] }) {
         text: `${row.activityCode} ${row.activityName}`,
       },
       {
-        node: (
-          <span className="tabular-nums">
-            {row.attemptNumber}
-            <span className="text-muted-foreground"> / {row.maxAttempts}</span>
-          </span>
-        ),
+        node: <span className="tabular-nums">{row.attemptNumber}</span>,
         sort: row.attemptNumber,
         text: `attempt ${row.attemptNumber}`,
       },

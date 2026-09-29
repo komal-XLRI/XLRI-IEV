@@ -30,7 +30,7 @@ export interface AdminOverview {
   completedActivities: number;
   underReview: number;
   revisionRequired: number;
-  maxAttemptsReached: number;
+  presentationReceived: number;
   facultyCount: number;
   mentorCount: number;
   unassignedVentures: number;
@@ -70,7 +70,7 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     completedActivities: byStatus.get('COMPLETED') ?? 0,
     underReview: byStatus.get('UNDER_REVIEW') ?? 0,
     revisionRequired: byStatus.get('REVISION_REQUIRED') ?? 0,
-    maxAttemptsReached: byStatus.get('MAX_ATTEMPTS_REACHED') ?? 0,
+    presentationReceived: byStatus.get('PRESENTATION_RECEIVED') ?? 0,
     facultyCount,
     mentorCount,
     unassignedVentures,
@@ -98,7 +98,7 @@ export interface StudentProgressRow {
   inProgress: number;
   underReview: number;
   revisionRequired: number;
-  maxAttemptsReached: number;
+  presentationReceived: number;
 }
 
 /**
@@ -173,37 +173,36 @@ export async function getStudentProgressReport(
   const count = (rows: typeof records, status: StudentActivityStatus) =>
     rows.filter((row) => row.status === status).length;
 
-  const rows: StudentProgressRow[] = ventures
-    .map((venture) => {
-      const bucket = byVenture.get(venture._id.toString()) ?? [];
-      const profile = venture.studentId
-        ? profileByUser.get(venture.studentId._id?.toString() ?? '')
-        : undefined;
+  const rows: StudentProgressRow[] = ventures.map((venture) => {
+    const bucket = byVenture.get(venture._id.toString()) ?? [];
+    const profile = venture.studentId
+      ? profileByUser.get(venture.studentId._id?.toString() ?? '')
+      : undefined;
 
-      return {
-        studentVentureId: venture._id.toString(),
-        studentName: venture.studentId?.name ?? 'Unknown',
-        studentEmail: venture.studentId?.email ?? '',
-        rollNumber: profile?.rollNumber ?? null,
-        batch: profile?.batch ?? null,
-        ventureName: venture.ventureName,
-        industry: venture.industry ?? null,
-        ventureStatus: venture.status,
-        facultyName: venture.facultyId?.name ?? null,
-        mentorName: venture.mentorId?.name ?? null,
-        completed: count(bucket, 'COMPLETED'),
-        total: bucket.length,
-        percentage: completionPercentage(bucket.map((row) => ({ order: 0, status: row.status }))),
-        currentActivity: venture.currentVentureActivityId
-          ? `${venture.currentVentureActivityId.activityCode} ${venture.currentVentureActivityId.name}`
-          : null,
-        notStarted: count(bucket, 'NOT_STARTED'),
-        inProgress: count(bucket, 'IN_PROGRESS'),
-        underReview: count(bucket, 'UNDER_REVIEW'),
-        revisionRequired: count(bucket, 'REVISION_REQUIRED'),
-        maxAttemptsReached: count(bucket, 'MAX_ATTEMPTS_REACHED'),
-      };
-    });
+    return {
+      studentVentureId: venture._id.toString(),
+      studentName: venture.studentId?.name ?? 'Unknown',
+      studentEmail: venture.studentId?.email ?? '',
+      rollNumber: profile?.rollNumber ?? null,
+      batch: profile?.batch ?? null,
+      ventureName: venture.ventureName,
+      industry: venture.industry ?? null,
+      ventureStatus: venture.status,
+      facultyName: venture.facultyId?.name ?? null,
+      mentorName: venture.mentorId?.name ?? null,
+      completed: count(bucket, 'COMPLETED'),
+      total: bucket.length,
+      percentage: completionPercentage(bucket.map((row) => ({ order: 0, status: row.status }))),
+      currentActivity: venture.currentVentureActivityId
+        ? `${venture.currentVentureActivityId.activityCode} ${venture.currentVentureActivityId.name}`
+        : null,
+      notStarted: count(bucket, 'NOT_STARTED'),
+      inProgress: count(bucket, 'IN_PROGRESS'),
+      underReview: count(bucket, 'UNDER_REVIEW'),
+      revisionRequired: count(bucket, 'REVISION_REQUIRED'),
+      presentationReceived: count(bucket, 'PRESENTATION_RECEIVED'),
+    };
+  });
 
   // No batch filter here: `resolveVentureScope` already narrowed the ventures
   // to that batch, for this report and every other one. Re-applying it with an
@@ -228,13 +227,12 @@ export interface ActivityCompletionRow {
   startDate: Date | null;
   endDate: Date | null;
   durationDays: number;
-  maxAttempts: number;
   notStarted: number;
   inProgress: number;
   underReview: number;
   revisionRequired: number;
   completed: number;
-  maxAttemptsReached: number;
+  presentationReceived: number;
   total: number;
   completionRate: number;
 }
@@ -300,13 +298,12 @@ export async function getActivityCompletionReport(
       startDate: activity.startDate ?? null,
       endDate: activity.endDate ?? null,
       durationDays: activity.durationDays,
-      maxAttempts: activity.maxAttempts,
       notStarted: get('NOT_STARTED'),
       inProgress: get('IN_PROGRESS'),
       underReview: get('UNDER_REVIEW'),
       revisionRequired: get('REVISION_REQUIRED'),
       completed,
-      maxAttemptsReached: get('MAX_ATTEMPTS_REACHED'),
+      presentationReceived: get('PRESENTATION_RECEIVED'),
       total,
       completionRate: total === 0 ? 0 : Math.round((completed / total) * 100),
     };
@@ -462,113 +459,6 @@ export async function getReviewSummaryReport(
     filters.sortBy,
     filters.sortDir,
     (a, b) => b.pending - a.pending || a.reviewerName.localeCompare(b.reviewerName),
-  );
-}
-
-// ------------------------------------------- Attempts and revisions ----
-
-export interface AttemptsReportRow {
-  studentName: string;
-  studentEmail: string;
-  ventureName: string;
-  activityCode: string;
-  activityName: string;
-  attemptsUsed: number;
-  maxAttempts: number;
-  attemptsRemaining: number;
-  status: StudentActivityStatus;
-  facultyReviewStatus: string;
-  mentorReviewStatus: string;
-  submissions: number;
-  facultyName: string | null;
-  mentorName: string | null;
-  lastUpdatedAt: Date;
-  completedAt: Date | null;
-}
-
-export async function getAttemptsReport(
-  filters: ReportFilters = NO_FILTERS,
-): Promise<AttemptsReportRow[]> {
-  await connectToDatabase();
-
-  const [ventureScope, activityScope] = await Promise.all([
-    resolveVentureScope(filters),
-    resolveActivityScope(filters),
-  ]);
-
-  const recordQuery: Record<string, unknown> = { attemptNumber: { $gt: 0 } };
-  applyScope(recordQuery, 'studentVentureId', ventureScope);
-  applyScope(recordQuery, 'ventureActivityId', activityScope);
-  if (filters.activityStatus) recordQuery.status = filters.activityStatus;
-
-  const updatedAt = dateRangeClause(filters);
-  if (updatedAt) recordQuery.updatedAt = updatedAt;
-
-  const records = await StudentVentureActivity.find(recordQuery)
-    .sort({ updatedAt: -1 })
-    .limit(filters.limit ?? 5_000)
-    .lean()
-    .exec();
-
-  if (records.length === 0) return [];
-
-  const [activities, ventures, submissionCounts] = await Promise.all([
-    VentureActivity.find({ _id: { $in: records.map((r) => r.ventureActivityId) } })
-      .select('activityCode name maxAttempts order')
-      .lean()
-      .exec(),
-    StudentVenture.find({ _id: { $in: records.map((r) => r.studentVentureId) } })
-      .populate<{ studentId: { _id: unknown; name: string; email: string } }>(
-        'studentId',
-        'name email',
-      )
-      .populate<{ facultyId: { _id: unknown; name: string } | null }>('facultyId', 'name')
-      .populate<{ mentorId: { _id: unknown; name: string } | null }>('mentorId', 'name')
-      .select('ventureName studentId facultyId mentorId')
-      .lean()
-      .exec(),
-    VentureSubmission.aggregate<{ _id: unknown; count: number }>([
-      { $match: { studentVentureActivityId: { $in: records.map((r) => r._id) } } },
-      { $group: { _id: '$studentVentureActivityId', count: { $sum: 1 } } },
-    ]).exec(),
-  ]);
-
-  const activityById = new Map(activities.map((a) => [a._id.toString(), a]));
-  const ventureById = new Map(ventures.map((v) => [v._id.toString(), v]));
-  const submissionsById = new Map(submissionCounts.map((s) => [String(s._id), s.count]));
-
-  const rows = records
-    .map((record): AttemptsReportRow | null => {
-      const activity = activityById.get(record.ventureActivityId.toString());
-      const venture = ventureById.get(record.studentVentureId.toString());
-      if (!activity || !venture) return null;
-
-      return {
-        studentName: venture.studentId?.name ?? 'Unknown',
-        studentEmail: venture.studentId?.email ?? '',
-        ventureName: venture.ventureName,
-        activityCode: activity.activityCode,
-        activityName: activity.name,
-        attemptsUsed: record.attemptNumber,
-        maxAttempts: activity.maxAttempts,
-        attemptsRemaining: Math.max(0, activity.maxAttempts - record.attemptNumber),
-        status: record.status,
-        facultyReviewStatus: record.facultyReviewStatus,
-        mentorReviewStatus: record.mentorReviewStatus,
-        submissions: submissionsById.get(record._id.toString()) ?? 0,
-        facultyName: venture.facultyId?.name ?? null,
-        mentorName: venture.mentorId?.name ?? null,
-        lastUpdatedAt: record.updatedAt,
-        completedAt: record.completedAt ?? null,
-      };
-    })
-    .filter((row): row is AttemptsReportRow => row !== null);
-
-  return sortRows(
-    rows,
-    filters.sortBy,
-    filters.sortDir,
-    (a, b) => b.lastUpdatedAt.getTime() - a.lastUpdatedAt.getTime(),
   );
 }
 

@@ -263,15 +263,6 @@ const ventureActivityRow = z
     order: z.coerce.number().int().min(1).max(99),
     startDate: z.coerce.date({ message: 'Use YYYY-MM-DD' }),
     endDate: z.coerce.date({ message: 'Use YYYY-MM-DD' }),
-    maxAttempts: z.coerce.number().int().min(1).max(10).default(3),
-    evidenceRequired: z
-      .string()
-      .trim()
-      .optional()
-      .transform((value) => {
-        if (value === undefined || value === '') return true;
-        return !/^(no|false|0|n)$/i.test(value);
-      }),
     description: optional(4000),
     supportActivityCodes: optional(200),
   })
@@ -293,14 +284,6 @@ export const ventureActivityImport: ImportSpec<z.infer<typeof ventureActivityRow
     { field: 'order', label: 'Order', required: true, example: '1' },
     { field: 'startDate', label: 'Start Date', required: true, example: '2026-07-01' },
     { field: 'endDate', label: 'End Date', required: true, example: '2026-07-14' },
-    { field: 'maxAttempts', label: 'Max Attempts', required: false, example: '3' },
-    {
-      field: 'evidenceRequired',
-      label: 'Evidence Required',
-      required: false,
-      example: 'Yes',
-      hint: 'Yes/No — defaults to Yes',
-    },
     {
       field: 'supportActivityCodes',
       label: 'Support Activity Codes',
@@ -342,8 +325,6 @@ export const ventureActivityImport: ImportSpec<z.infer<typeof ventureActivityRow
       order: row.order,
       startDate: row.startDate,
       endDate: row.endDate,
-      maxAttempts: row.maxAttempts,
-      evidenceRequired: row.evidenceRequired,
       status: 'ACTIVE',
     });
 
@@ -686,8 +667,9 @@ function feedbackTimestamp(value: string): Date | null {
     return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
   }
 
-  const slashed =
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(text);
+  const slashed = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(
+    text,
+  );
 
   if (slashed) {
     return new Date(
