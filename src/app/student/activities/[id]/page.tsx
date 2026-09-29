@@ -22,6 +22,8 @@ import { getSubmissionHistory } from '@/services/submissions/submissionService';
 import { getSupportActivitiesForVentureActivity } from '@/services/ventures/ventureActivityService';
 import { toTimelineRow } from '@/services/ventures/timeline';
 import { SubmissionHistory } from '@/components/venture/SubmissionHistory';
+import { BehaviourFeedbackCard } from '@/components/venture/BehaviourFeedbackCard';
+import { getBehaviourFeedbackForRecord } from '@/services/ventures/behaviourService';
 import { durationInDays, formatDate, formatDateRange, windowState } from '@/lib/utils/dates';
 import { isValidObjectId } from '@/lib/utils/ids';
 import { serialize } from '@/lib/utils/serialize';
@@ -45,11 +47,12 @@ export default async function StudentActivityPage({ params }: { params: Promise<
 
   const row = toTimelineRow(entry);
 
-  const [history, supports] = await Promise.all([
+  const [history, supports, behaviour] = await Promise.all([
     // Work submitted under the retired in-app flow. Shown when it exists so
     // nothing a student handed in, or any comment on it, disappears.
     getSubmissionHistory(id),
     getSupportActivitiesForVentureActivity(context.activity._id.toString()),
+    getBehaviourFeedbackForRecord(id),
   ]);
 
   const start = context.activity.startDate;
@@ -165,6 +168,10 @@ export default async function StudentActivityPage({ params }: { params: Promise<
           }
           tone={presented ? 'positive' : 'neutral'}
         />
+      </div>
+
+      <div className="mt-5">
+        <BehaviourFeedbackCard feedback={behaviour} />
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">

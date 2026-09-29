@@ -12,6 +12,7 @@ import {
   updateUser,
   type ImportOutcome,
 } from '@/services/users/userService';
+import { deleteStudent, type DeletedStudent } from '@/services/users/deleteStudent';
 import { USER_STATUSES } from '@/lib/constants/roles';
 import { z } from 'zod';
 
@@ -135,6 +136,27 @@ export async function setUserStatusAction(
     revalidatePath('/admin/faculty');
     revalidatePath('/admin/mentors');
 
+    return result;
+  });
+}
+
+/**
+ * Permanently deletes a student and all of their records. The caller must type
+ * the student's email; the service re-checks it against the account.
+ */
+export async function deleteStudentAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<DeletedStudent>> {
+  return runAction(async () => {
+    await requireAdmin();
+
+    const userId = objectId.parse(formValue(formData, 'userId'));
+    const confirmEmail = formValue(formData, 'confirmEmail') ?? '';
+
+    const result = await deleteStudent(userId, confirmEmail);
+
+    revalidatePath('/admin', 'layout');
     return result;
   });
 }

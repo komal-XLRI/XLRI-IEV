@@ -8,6 +8,8 @@ import {
   listSupportActivities,
 } from '@/services/ventures/ventureActivityService';
 import { listPresentationsForActivity } from '@/services/ventures/presentationService';
+import { listBehaviourForActivity } from '@/services/ventures/behaviourService';
+import { BehaviourPanel } from '@/components/admin/BehaviourPanel';
 import { listTerms } from '@/services/academic/academicService';
 import { EditVentureActivity } from '@/components/admin/EditVentureActivity';
 import { PresentationsPanel } from '@/components/admin/PresentationsPanel';
@@ -25,19 +27,21 @@ export default async function EditVentureActivityPage({
   const { id } = await params;
   if (!isValidObjectId(id)) notFound();
 
-  const [activity, terms, allSupports, mappedSupports, presentations] = await Promise.all([
-    getVentureActivity(id),
-    listTerms(),
-    listSupportActivities(),
-    getSupportActivitiesForVentureActivity(id),
-    listPresentationsForActivity(id),
-  ]);
+  const [activity, terms, allSupports, mappedSupports, presentations, behaviour] =
+    await Promise.all([
+      getVentureActivity(id),
+      listTerms(),
+      listSupportActivities(),
+      getSupportActivitiesForVentureActivity(id),
+      listPresentationsForActivity(id),
+      listBehaviourForActivity(id),
+    ]);
 
   return (
     <>
       <PageHeader
         title={`${activity.activityCode} · ${activity.name}`}
-        description="Student presentations, dates and the support activities that feed this stage."
+        description="Student presentations, HR & behaviour feedback, dates and the support activities that feed this stage."
         action={
           <span className="flex flex-wrap items-center gap-3">
             {/* Attendance moved to its own register; this is the same activity,
@@ -60,6 +64,8 @@ export default async function EditVentureActivityPage({
         folderUrl={activity.presentationFolderUrl ?? null}
         rows={presentations}
       />
+
+      <BehaviourPanel rows={behaviour} />
 
       <EditVentureActivity
         activity={serialize({

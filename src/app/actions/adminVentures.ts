@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/auth/currentUser';
 import { runAction, type ActionResult } from '@/lib/actions/actionResult';
 import {
   assignReviewersSchema,
+  behaviourFeedbackSchema,
   createStudentVentureSchema,
   createVentureActivitySchema,
   presentationFolderSchema,
@@ -32,6 +33,11 @@ import {
   setPresentationFolder,
   setPresentationsReceived,
 } from '@/services/ventures/presentationService';
+import {
+  deleteBehaviourFeedback,
+  saveBehaviourFeedback,
+} from '@/services/ventures/behaviourService';
+import { BEHAVIOUR_AREAS } from '@/lib/constants/behaviour';
 import { serialize } from '@/lib/utils/serialize';
 
 function value(formData: FormData, key: string): string | undefined {
@@ -158,6 +164,48 @@ export async function setPresentationsReceivedAction(
 
     revalidatePresentations(input.ventureActivityId);
     return result;
+  });
+}
+
+// ------------------------------------------------- HR & behaviour ----
+
+function revalidateBehaviour() {
+  revalidatePath('/admin/venture-activities', 'layout');
+  revalidatePath('/student', 'layout');
+}
+
+/** Gives, or replaces, one student's HR & behaviour feedback on one stage. */
+export async function saveBehaviourFeedbackAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ saved: true }>> {
+  return runAction(async () => {
+    const admin = await requireAdmin();
+
+    const input = behaviourFeedbackSchema.parse({
+      studentVentureActivityId: value(formData, 'studentVentureActivityId'),
+      ratings: Object.fromEntries(
+        BEHAVIOUR_AREAS.map((area) => [area.key, value(formData, `rating.${area.key}`)]),
+      ),
+      comments: submitted(formData, 'comments'),
+    });
+
+    await saveBehaviourFeedback(input, admin.userId);
+
+    revalidateBehaviour();
+    return { saved: true as const };
+  });
+}
+
+export async function deleteBehaviourFeedbackAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ deleted: true }>> {
+  return runAction(async () => {
+    await requireAdmin();
+    await deleteBehaviourFeedback(objectId.parse(value(formData, 'studentVentureActivityId')));
+    revalidateBehaviour();
+    return { deleted: true as const };
   });
 }
 

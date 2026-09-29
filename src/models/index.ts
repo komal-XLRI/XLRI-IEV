@@ -27,6 +27,8 @@ export {
   type IVentureActivityAttendance,
 } from './VentureActivityAttendance';
 
+export { BehaviourFeedback, type IBehaviourFeedback } from './BehaviourFeedback';
+
 export { SupportActivity, type ISupportActivity } from './SupportActivity';
 export { StudentSupportActivity, type IStudentSupportActivity } from './StudentSupportActivity';
 

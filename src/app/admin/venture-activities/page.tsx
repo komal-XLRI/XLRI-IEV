@@ -17,6 +17,7 @@ import {
 import { getActivityCompletionReport } from '@/services/reports/reportService';
 import { getAttendanceBoard } from '@/services/ventures/attendanceService';
 import { getPresentationTallies } from '@/services/ventures/presentationService';
+import { getBehaviourTallies } from '@/services/ventures/behaviourService';
 import { presentationStageState } from '@/lib/rules/presentations';
 import { listTerms } from '@/services/academic/academicService';
 import { ventureActivityImport } from '@/services/import/specs';
@@ -31,16 +32,25 @@ export const metadata: Metadata = { title: 'Venture activities' };
 export const dynamic = 'force-dynamic';
 
 export default async function VentureActivitiesPage() {
-  const [activities, terms, supports, mappingIndex, completion, attendance, tallies] =
-    await Promise.all([
-      listVentureActivities(),
-      listTerms(),
-      listSupportActivities(),
-      getSupportMappingIndex(),
-      getActivityCompletionReport(),
-      getAttendanceBoard(),
-      getPresentationTallies(),
-    ]);
+  const [
+    activities,
+    terms,
+    supports,
+    mappingIndex,
+    completion,
+    attendance,
+    tallies,
+    behaviourTallies,
+  ] = await Promise.all([
+    listVentureActivities(),
+    listTerms(),
+    listSupportActivities(),
+    getSupportMappingIndex(),
+    getActivityCompletionReport(),
+    getAttendanceBoard(),
+    getPresentationTallies(),
+    getBehaviourTallies(),
+  ]);
 
   const supportCodeById = new Map(supports.map((s) => [s._id.toString(), s.activityCode]));
   const completionByCode = new Map(completion.map((row) => [row.activityCode, row]));
@@ -63,6 +73,7 @@ export default async function VentureActivitiesPage() {
       presentationFolderUrl: activity.presentationFolderUrl ?? null,
       presentationsReceived: tally.received,
       presentationStage: presentationStageState(tally),
+      behaviourGiven: behaviourTallies[id] ?? 0,
       status: activity.status,
       supportCodes: (mappingIndex[id] ?? [])
         .map((supportId) => supportCodeById.get(supportId))

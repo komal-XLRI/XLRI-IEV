@@ -142,6 +142,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   tone = 'danger',
   busy = false,
+  confirmDisabled = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -152,6 +153,8 @@ export function ConfirmDialog({
   cancelLabel?: string;
   tone?: 'danger' | 'primary';
   busy?: boolean;
+  /** Holds the confirm button off until the caller's own check passes. */
+  confirmDisabled?: boolean;
 }) {
   return (
     <Modal
@@ -167,7 +170,7 @@ export function ConfirmDialog({
           <Button
             variant={tone === 'danger' ? 'danger' : 'primary'}
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
           >
             {busy ? 'Working…' : confirmLabel}
           </Button>

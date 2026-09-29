@@ -13,6 +13,7 @@ import { useToast } from '@/components/ui/Toast';
 import { RecordDialog } from './RecordDialog';
 import { createUserAction, setUserStatusAction } from '@/app/actions/adminUsers';
 import { EditUserForm } from './EditUserForm';
+import { DeleteStudentButton } from './DeleteStudentButton';
 import { formatDate } from '@/lib/utils/dates';
 import type { Role } from '@/lib/constants/roles';
 
@@ -208,6 +209,11 @@ export function UserDirectory({
               }}
             />
             <StatusAction user={user} role={role} />
+            {role === 'STUDENT' ? (
+              <DeleteStudentButton
+                student={{ _id: user._id, name: user.name, email: user.email }}
+              />
+            ) : null}
           </div>
         ),
       },

@@ -20,6 +20,7 @@ import { Card, CardBody, CardHeader, EmptyState, KpiCard, Section } from '@/comp
 import { Badge, ReviewStatusBadge } from '@/components/ui/Badge';
 import { ActivityTimeline, ProgressBar } from '@/components/venture/ActivityTimeline';
 import { ExportMenu } from '@/components/export/ExportMenu';
+import { DeleteStudentButton } from '@/components/admin/DeleteStudentButton';
 import { getStudentDossier } from '@/services/students/studentDossier';
 import { toTimeline } from '@/services/ventures/timeline';
 import { formatDate, formatDateTime } from '@/lib/utils/dates';
@@ -90,6 +91,10 @@ export default async function AdminStudentDetailPage({
                 extraParams={{ studentVentureId: venture._id }}
               />
             ) : null}
+            <DeleteStudentButton
+              student={{ _id: String(user._id), name: user.name, email: user.email }}
+              redirectTo="/admin/students"
+            />
           </span>
         }
       />
