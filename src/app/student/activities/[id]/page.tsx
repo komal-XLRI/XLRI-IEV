@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FolderOpen,
   HeartHandshake,
+  MessagesSquare,
   Presentation,
   Timer,
 } from 'lucide-react';
@@ -24,6 +25,8 @@ import { toTimelineRow } from '@/services/ventures/timeline';
 import { SubmissionHistory } from '@/components/venture/SubmissionHistory';
 import { BehaviourFeedbackCard } from '@/components/venture/BehaviourFeedbackCard';
 import { getBehaviourFeedbackForRecord } from '@/services/ventures/behaviourService';
+import { getStudentMentorFeedback } from '@/services/ventures/mentorFeedbackService';
+import { MentorFeedbackEntries } from '@/components/venture/MentorFeedbackEntries';
 import { durationInDays, formatDate, formatDateRange, windowState } from '@/lib/utils/dates';
 import { isValidObjectId } from '@/lib/utils/ids';
 import { serialize } from '@/lib/utils/serialize';
@@ -47,12 +50,15 @@ export default async function StudentActivityPage({ params }: { params: Promise<
 
   const row = toTimelineRow(entry);
 
-  const [history, supports, behaviour] = await Promise.all([
+  // Ownership was checked above; `id` is this student's own record, so the
+  // feedback read below can only ever be theirs.
+  const [history, supports, behaviour, mentorFeedback] = await Promise.all([
     // Work submitted under the retired in-app flow. Shown when it exists so
     // nothing a student handed in, or any comment on it, disappears.
     getSubmissionHistory(id),
     getSupportActivitiesForVentureActivity(context.activity._id.toString()),
     getBehaviourFeedbackForRecord(id),
+    getStudentMentorFeedback(id),
   ]);
 
   const start = context.activity.startDate;
@@ -123,7 +129,10 @@ export default async function StudentActivityPage({ params }: { params: Promise<
               ) : row.presentationReceivedAt ? (
                 <>
                   <span className="text-foreground font-medium">Presentation received</span> on{' '}
-                  {formatDate(row.presentationReceivedAt)}. Feedback is next.
+                  {formatDate(row.presentationReceivedAt)}.{' '}
+                  {mentorFeedback.complete
+                    ? 'Mentor feedback is complete.'
+                    : 'The stage completes once mentor feedback is in.'}
                 </>
               ) : (
                 <>
@@ -153,9 +162,29 @@ export default async function StudentActivityPage({ params }: { params: Promise<
         </CardBody>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Window" value={formatDateRange(row.startDate, row.endDate)} />
         <StatTile label="Duration" value={`${row.durationDays} days`} hint="Set on the activity" />
+        {/* Feedback only exists for a received presentation; before that there
+            is nothing to count, so the tile says so rather than showing 0. */}
+        <StatTile
+          label="Mentor feedback"
+          value={
+            !presented
+              ? 'After presentation'
+              : mentorFeedback.complete
+                ? 'Complete'
+                : `${mentorFeedback.counted} of ${mentorFeedback.required}`
+          }
+          hint={
+            !presented
+              ? undefined
+              : mentorFeedback.complete
+                ? `${mentorFeedback.counted} response(s) received`
+                : 'Responses received'
+          }
+          tone={mentorFeedback.complete ? 'positive' : 'neutral'}
+        />
         <StatTile
           label="Presentation"
           value={presented ? 'Received' : 'Pending'}
@@ -169,6 +198,38 @@ export default async function StudentActivityPage({ params }: { params: Promise<
           tone={presented ? 'positive' : 'neutral'}
         />
       </div>
+
+      {presented ? (
+        <Card className="mt-5">
+          <CardHeader
+            title="Mentor feedback"
+            description="Feedback from faculty and mentors on your presentation for this stage."
+            icon={MessagesSquare}
+            action={
+              mentorFeedback.complete ? (
+                <Badge tone="success" icon={CheckCircle2}>
+                  Feedback complete
+                </Badge>
+              ) : (
+                <Badge tone="neutral">
+                  {mentorFeedback.counted} of {mentorFeedback.required} received
+                </Badge>
+              )
+            }
+          />
+          {mentorFeedback.entries.length === 0 ? (
+            <EmptyState
+              size="sm"
+              title="No feedback yet"
+              description="Feedback appears here as soon as a mentor submits it."
+            />
+          ) : (
+            <CardBody>
+              <MentorFeedbackEntries entries={mentorFeedback.entries} />
+            </CardBody>
+          )}
+        </Card>
+      ) : null}
 
       <div className="mt-5">
         <BehaviourFeedbackCard feedback={behaviour} />

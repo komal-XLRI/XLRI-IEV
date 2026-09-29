@@ -4,6 +4,7 @@ import { sessionOption, withTransaction } from '@/lib/db/transaction';
 import {
   BehaviourFeedback,
   Evidence,
+  MentorFeedback,
   Review,
   StudentProfile,
   StudentSupportActivity,
@@ -33,6 +34,7 @@ export interface DeletedStudent {
     attendanceRecords: number;
     workshopFeedback: number;
     behaviourFeedback: number;
+    mentorFeedback: number;
   };
   /** Uploaded files Cloudinary refused to delete; their records are gone regardless. */
   filesLeftInStorage: number;
@@ -42,7 +44,7 @@ export interface DeletedStudent {
  * Permanently removes a student and everything that exists only because of
  * them: their venture, its activity and support records, every submission,
  * review and evidence file on it, and every attendance and workshop-feedback
- * row in their name, and their HR & behaviour feedback.
+ * row in their name, their HR & behaviour feedback, and mentor feedback on their presentations.
  *
  * This is the one place a user is deleted rather than deactivated. It is
  * limited to students — faculty and mentors are referenced from other
@@ -120,6 +122,10 @@ export async function deleteStudent(userId: string, confirmEmail: string): Promi
       opts,
     ).exec();
     const feedback = await WorkshopFeedback.deleteMany({ studentId: userId }, opts).exec();
+    const mentor = await MentorFeedback.deleteMany(
+      { studentVentureId: { $in: ventureIds } },
+      opts,
+    ).exec();
     const behaviour = await BehaviourFeedback.deleteMany(
       { studentVentureId: { $in: ventureIds } },
       opts,
@@ -140,6 +146,7 @@ export async function deleteStudent(userId: string, confirmEmail: string): Promi
         workshopAttendance.deletedCount,
       workshopFeedback: feedback.deletedCount,
       behaviourFeedback: behaviour.deletedCount,
+      mentorFeedback: mentor.deletedCount,
     };
   });
 

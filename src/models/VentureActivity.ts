@@ -24,11 +24,41 @@ export interface IVentureActivity {
    */
   presentationFolderUrl?: string | null;
 
+  /**
+   * The Google Form mentors fill in for this stage. Only its location is kept
+   * here — the questions belong to Google Forms and can differ per stage.
+   */
+  feedbackForm?: IFeedbackFormConfig | null;
+
   status: ContentStatus;
 
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface IFeedbackFormConfig {
+  /** The Google "pre-filled link" with {{IEV_TOKEN}} etc. as the answers. */
+  prefillUrlTemplate: string;
+  /** The `/forms/d/e/{id}` id, used to check a response came from this form. */
+  publishedFormId: string;
+  enabled: boolean;
+  /** Counted mentor responses a received presentation needs to complete the stage. */
+  requiredFeedbackCount: number;
+  updatedBy?: Types.ObjectId | null;
+  updatedAt?: Date | null;
+}
+
+const feedbackFormSchema = new Schema<IFeedbackFormConfig>(
+  {
+    prefillUrlTemplate: { type: String, required: true, trim: true },
+    publishedFormId: { type: String, required: true, trim: true },
+    enabled: { type: Boolean, required: true, default: true },
+    requiredFeedbackCount: { type: Number, required: true, min: 1, max: 10, default: 1 },
+    updatedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    updatedAt: { type: Date, default: null },
+  },
+  { _id: false },
+);
 
 const ventureActivitySchema = new Schema<IVentureActivity>(
   {
@@ -44,6 +74,8 @@ const ventureActivitySchema = new Schema<IVentureActivity>(
 
     presentationFolderUrl: { type: String, trim: true, default: null },
 
+    feedbackForm: { type: feedbackFormSchema, default: null },
+
     status: { type: String, required: true, enum: CONTENT_STATUSES, default: 'ACTIVE' },
   },
   { timestamps: true, collection: 'ventureactivities' },
@@ -52,6 +84,7 @@ const ventureActivitySchema = new Schema<IVentureActivity>(
 ventureActivitySchema.index({ activityCode: 1 }, { unique: true });
 ventureActivitySchema.index({ order: 1 }, { unique: true });
 ventureActivitySchema.index({ termId: 1, order: 1 });
+ventureActivitySchema.index({ 'feedbackForm.publishedFormId': 1 }, { sparse: true });
 
 /**
  * The 12–15 day programme guideline is advisory and is NOT validated here —

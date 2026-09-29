@@ -38,6 +38,14 @@ import {
   saveBehaviourFeedback,
 } from '@/services/ventures/behaviourService';
 import { BEHAVIOUR_AREAS } from '@/lib/constants/behaviour';
+import {
+  getFeedbackQr,
+  regenerateFeedbackToken,
+  saveFeedbackFormConfig,
+  type FeedbackQrResult,
+} from '@/services/ventures/mentorFeedbackService';
+import { feedbackFormConfigSchema } from '@/validators/mentorFeedback';
+import { publicBaseUrl } from '@/lib/feedback/baseUrl';
 import { serialize } from '@/lib/utils/serialize';
 
 function value(formData: FormData, key: string): string | undefined {
@@ -164,6 +172,61 @@ export async function setPresentationsReceivedAction(
 
     revalidatePresentations(input.ventureActivityId);
     return result;
+  });
+}
+
+// ------------------------------------------ Mentor feedback (Google Forms) ----
+
+function revalidateMentorFeedback() {
+  revalidatePath('/admin/venture-activities', 'layout');
+  revalidatePath('/student', 'layout');
+}
+
+/** Sets, changes or clears the Google Form for one stage. */
+export async function saveFeedbackFormConfigAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ completed: number }>> {
+  return runAction(async () => {
+    const admin = await requireAdmin();
+
+    const input = feedbackFormConfigSchema.parse({
+      ventureActivityId: value(formData, 'ventureActivityId'),
+      prefillUrlTemplate: submitted(formData, 'prefillUrlTemplate') ?? '',
+      enabled: formData.get('enabled') === 'on',
+      requiredFeedbackCount: value(formData, 'requiredFeedbackCount'),
+    });
+
+    const result = await saveFeedbackFormConfig(input, admin.userId);
+    revalidateMentorFeedback();
+    return result;
+  });
+}
+
+/**
+ * The QR for one presentation. Admin only — students never receive a QR. The
+ * service refuses unless the presentation is received and the stage has a
+ * usable form, whatever the page that asked believed.
+ */
+export async function getFeedbackQrAction(
+  recordId: string,
+): Promise<ActionResult<FeedbackQrResult>> {
+  return runAction(async () => {
+    await requireAdmin();
+    const id = objectId.parse(recordId);
+    return getFeedbackQr(id, await publicBaseUrl());
+  });
+}
+
+/** Revokes a presentation's QR by issuing a new token. */
+export async function regenerateFeedbackTokenAction(
+  recordId: string,
+): Promise<ActionResult<FeedbackQrResult>> {
+  return runAction(async () => {
+    await requireAdmin();
+    const id = objectId.parse(recordId);
+    await regenerateFeedbackToken(id);
+    return getFeedbackQr(id, await publicBaseUrl());
   });
 }
 

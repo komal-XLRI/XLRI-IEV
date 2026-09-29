@@ -18,7 +18,11 @@ export { SubjectSession, type ISubjectSession } from './SubjectSession';
 export { SubjectAttendance, type ISubjectAttendance } from './SubjectAttendance';
 
 export { StudentVenture, type IStudentVenture } from './StudentVenture';
-export { VentureActivity, type IVentureActivity } from './VentureActivity';
+export {
+  VentureActivity,
+  type IVentureActivity,
+  type IFeedbackFormConfig,
+} from './VentureActivity';
 export { ActivitySupportMapping, type IActivitySupportMapping } from './ActivitySupportMapping';
 export { StudentVentureActivity, type IStudentVentureActivity } from './StudentVentureActivity';
 export {
@@ -28,6 +32,13 @@ export {
 } from './VentureActivityAttendance';
 
 export { BehaviourFeedback, type IBehaviourFeedback } from './BehaviourFeedback';
+export { MentorFeedback, type IMentorFeedback, type IMentorFeedbackAnswer } from './MentorFeedback';
+export {
+  FeedbackSyncLog,
+  FEEDBACK_SYNC_OUTCOMES,
+  type FeedbackSyncOutcome,
+  type IFeedbackSyncLog,
+} from './FeedbackSyncLog';
 
 export { SupportActivity, type ISupportActivity } from './SupportActivity';
 export { StudentSupportActivity, type IStudentSupportActivity } from './StudentSupportActivity';

@@ -28,6 +28,8 @@ export interface VentureActivityView {
   presentationStage: PresentationStageState;
   /** Students who have HR & behaviour feedback on this stage. */
   behaviourGiven: number;
+  /** Mentor feedback complete, out of received presentations only. */
+  mentorFeedback: { received: number; complete: number; configured: boolean };
   status: string;
   supportCodes: string[];
   /** Cohort progress; null when no student has reached this activity yet. */
@@ -157,7 +159,10 @@ export function VentureActivityCard({ activity }: { activity: VentureActivityVie
           </Badge>
           {activity.total > 0 ? (
             <span className="type-caption ml-auto tabular-nums">
-              HR feedback {activity.behaviourGiven}/{activity.total}
+              {activity.mentorFeedback.configured
+                ? `Feedback ${activity.mentorFeedback.complete}/${activity.mentorFeedback.received} · `
+                : 'No feedback form · '}
+              HR {activity.behaviourGiven}/{activity.total}
             </span>
           ) : null}
         </div>

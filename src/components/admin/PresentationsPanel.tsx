@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ExternalLink, FolderOpen, Presentation } from 'lucide-react';
+import { CheckCircle2, ExternalLink, FolderOpen, Presentation, QrCode } from 'lucide-react';
+import { FeedbackQrModal } from './FeedbackQrModal';
 import { ActionForm } from '@/components/forms/ActionForm';
 import { Button, SubmitButton } from '@/components/ui/Button';
 import { Card, CardBody, CardFooter, CardHeader, EmptyState } from '@/components/ui/Card';
@@ -29,6 +30,12 @@ export interface PresentationChecklistRow {
   receivedAt: string | null;
 }
 
+export interface PresentationFeedbackSummary {
+  formConfigured: boolean;
+  byRecord: Record<string, { counted: number; required: number; complete: boolean }>;
+  tally: { received: number; complete: number; responses: number };
+}
+
 function isPresented(row: PresentationChecklistRow): boolean {
   return row.receivedAt !== null || row.status === 'COMPLETED';
 }
@@ -51,10 +58,13 @@ export function PresentationsPanel({
   ventureActivityId,
   folderUrl,
   rows,
+  feedback,
 }: {
   ventureActivityId: string;
   folderUrl: string | null;
   rows: PresentationChecklistRow[];
+  /** Mentor-feedback figures; absent when the page has none to give. */
+  feedback?: PresentationFeedbackSummary;
 }) {
   // A completed stage has, by definition, been presented — including one
   // completed under the old review flow, which carries no received date.
@@ -68,6 +78,7 @@ export function PresentationsPanel({
   );
 
   const [checked, setChecked] = useState<Set<string>>(() => new Set(savedIds));
+  const [qrFor, setQrFor] = useState<PresentationChecklistRow | null>(null);
 
   const stage = presentationStageState({
     total: rows.length,
@@ -156,6 +167,34 @@ export function PresentationsPanel({
               tone={checked.size === rows.length ? 'success' : 'primary'}
               label="Presentations received"
             />
+
+            {feedback?.formConfigured ? (
+              <>
+                <div className="mt-3 mb-1 flex items-baseline justify-between">
+                  <span className="type-overline">Mentor feedback complete</span>
+                  <span className="type-caption tabular-nums">
+                    {feedback.tally.complete}/{feedback.tally.received}
+                    {feedback.tally.responses > 0
+                      ? ` · ${feedback.tally.responses} response(s)`
+                      : ''}
+                  </span>
+                </div>
+                {/* Out of received presentations only — a student who has not
+                    presented is not owed feedback. */}
+                <MeterBar
+                  value={feedback.tally.complete}
+                  max={Math.max(1, feedback.tally.received)}
+                  size="sm"
+                  tone={
+                    feedback.tally.received > 0 &&
+                    feedback.tally.complete === feedback.tally.received
+                      ? 'success'
+                      : 'accent'
+                  }
+                  label="Mentor feedback complete"
+                />
+              </>
+            ) : null}
           </div>
         )}
       </CardBody>
@@ -177,8 +216,8 @@ export function PresentationsPanel({
                   const isChecked = checked.has(row.recordId);
 
                   return (
-                    <li key={row.recordId}>
-                      <label className="hover:bg-surface-hover flex cursor-pointer items-center gap-3 px-5 py-2.5 transition-colors has-disabled:cursor-default">
+                    <li key={row.recordId} className="flex flex-wrap items-center sm:flex-nowrap">
+                      <label className="hover:bg-surface-hover flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-5 py-2.5 transition-colors has-disabled:cursor-default">
                         <input
                           type="checkbox"
                           name="receivedRecordIds"
@@ -206,6 +245,17 @@ export function PresentationsPanel({
                           ) : null}
                         </span>
                       </label>
+
+                      {/* Outside the label, so pressing QR never toggles the
+                          checkbox. Keyed on the *saved* state: a tick that has
+                          not been saved yet is not a received presentation. */}
+                      <FeedbackCell
+                        saved={savedIds.has(row.recordId)}
+                        ticked={isChecked}
+                        summary={feedback?.byRecord[row.recordId]}
+                        formConfigured={feedback?.formConfigured ?? false}
+                        onQr={() => setQrFor(row)}
+                      />
                     </li>
                   );
                 })}
@@ -241,6 +291,56 @@ export function PresentationsPanel({
           )}
         </ActionForm>
       ) : null}
+
+      <FeedbackQrModal
+        key={qrFor?.recordId ?? 'closed'}
+        recordId={qrFor?.recordId ?? null}
+        studentName={qrFor?.studentName ?? ''}
+        onClose={() => setQrFor(null)}
+      />
     </Card>
+  );
+}
+
+function FeedbackCell({
+  saved,
+  ticked,
+  summary,
+  formConfigured,
+  onQr,
+}: {
+  saved: boolean;
+  ticked: boolean;
+  summary?: { counted: number; required: number; complete: boolean };
+  formConfigured: boolean;
+  onQr: () => void;
+}) {
+  if (!saved) {
+    return (
+      <span className="type-caption w-full px-5 pb-2.5 sm:w-48 sm:shrink-0 sm:pb-0 sm:text-right">
+        {ticked ? 'Save to enable feedback' : 'Presentation pending'}
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex w-full items-center gap-2 px-5 pb-2.5 sm:w-48 sm:shrink-0 sm:justify-end sm:pb-0">
+      <Button type="button" variant="secondary" size="sm" onClick={onQr}>
+        <QrCode className="size-3.5" aria-hidden="true" />
+        QR
+      </Button>
+      <span className="flex flex-col items-end">
+        <span className="text-[12.5px] font-medium tabular-nums">
+          Feedback {summary?.counted ?? 0}
+          {formConfigured ? `/${summary?.required ?? 1}` : ''}
+        </span>
+        {summary?.complete ? (
+          <span className="text-success-soft-foreground inline-flex items-center gap-0.5 text-[11.5px] font-semibold">
+            <CheckCircle2 className="size-3" aria-hidden="true" />
+            Complete
+          </span>
+        ) : null}
+      </span>
+    </span>
   );
 }
