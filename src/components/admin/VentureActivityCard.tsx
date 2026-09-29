@@ -26,6 +26,8 @@ export interface VentureActivityView {
   /** Students whose presentation is confirmed in the folder. */
   presentationsReceived: number;
   presentationStage: PresentationStageState;
+  /** Students who have HR & behaviour feedback on this stage. */
+  behaviourGiven: number;
   status: string;
   supportCodes: string[];
   /** Cohort progress; null when no student has reached this activity yet. */
@@ -153,6 +155,11 @@ export function VentureActivityCard({ activity }: { activity: VentureActivityVie
           <Badge tone={STAGE_TONE[activity.presentationStage]}>
             {PRESENTATION_STAGE_LABELS[activity.presentationStage]}
           </Badge>
+          {activity.total > 0 ? (
+            <span className="type-caption ml-auto tabular-nums">
+              HR feedback {activity.behaviourGiven}/{activity.total}
+            </span>
+          ) : null}
         </div>
 
         <div>

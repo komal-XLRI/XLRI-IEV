@@ -5,6 +5,12 @@ import {
   SUPPORT_SCHEDULE_TYPES,
   VENTURE_STATUSES,
 } from '@/lib/constants/status';
+import {
+  BEHAVIOUR_AREAS,
+  BEHAVIOUR_RATING_MAX,
+  BEHAVIOUR_RATING_MIN,
+  type BehaviourArea,
+} from '@/lib/constants/behaviour';
 import { dateSchema, objectId } from './common';
 
 // ------------------------------------------------- Venture activities ----
@@ -72,6 +78,28 @@ export const presentationsReceivedSchema = z.object({
   ventureActivityId: objectId,
   receivedRecordIds: z.array(objectId).max(2000),
 });
+
+// ------------------------------------------------- HR & behaviour ----
+
+const behaviourRating = z.coerce
+  .number({ message: 'Choose a rating' })
+  .int()
+  .min(BEHAVIOUR_RATING_MIN, 'Choose a rating')
+  .max(BEHAVIOUR_RATING_MAX);
+
+/** Every area must be rated; comments are optional. */
+export const behaviourFeedbackSchema = z.object({
+  studentVentureActivityId: objectId,
+  ratings: z.object(
+    Object.fromEntries(BEHAVIOUR_AREAS.map((area) => [area.key, behaviourRating])) as Record<
+      BehaviourArea,
+      typeof behaviourRating
+    >,
+  ),
+  comments: z.string().trim().max(4000).optional().or(z.literal('')),
+});
+
+export type BehaviourFeedbackInput = z.infer<typeof behaviourFeedbackSchema>;
 
 // ------------------------------------------------- Support activities ----
 
