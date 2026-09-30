@@ -345,7 +345,7 @@ async function main() {
   const { createUser } = await import('../src/services/users/userService');
   const { createStudentVenture, bootstrapActivityRecords, getVentureProgress, assignReviewers } =
     await import('../src/services/ventures/studentVentureService');
-  const { setPresentationFolder, setPresentationsReceived } =
+  const { createPresentation, setParticipantReceived } =
     await import('../src/services/ventures/presentationService');
   const { saveAttendance } = await import('../src/services/ventures/attendanceService');
   const { createWorkshop } = await import('../src/services/workshops/workshopService');
@@ -498,16 +498,11 @@ async function main() {
   if (!admin) throw new Error('No admin account found. Run `npm run seed` first.');
 
   const firstActivity = await models.VentureActivity.findOne({ status: 'ACTIVE' })
-    .select('_id')
+    .select('_id startDate')
     .sort({ order: 1 })
     .lean()
     .exec();
   if (!firstActivity) throw new Error('No venture activities found. Run `npm run seed` first.');
-
-  await setPresentationFolder(
-    firstActivity._id.toString(),
-    'https://drive.google.com/drive/folders/iev-demo-presentations',
-  );
 
   const presentedRecordIds: string[] = [];
   for (const spec of VENTURES) {
@@ -523,23 +518,37 @@ async function main() {
     if (first) presentedRecordIds.push(first.recordId);
   }
 
-  // Merged with what is already ticked, so a re-run never clears a mark
-  // somebody made by hand.
-  const alreadyReceived = await models.StudentVentureActivity.find({
+  // One presentation on the first stage for the students who have presented.
+  // Added once: a re-run finds it by its Drive link and leaves it alone.
+  const demoDrive = 'https://drive.google.com/drive/folders/iev-demo-presentations';
+  let presented = 0;
+  const existing = await models.Presentation.exists({
     ventureActivityId: firstActivity._id,
-    presentationReceivedAt: { $ne: null },
-  })
-    .select('_id')
-    .lean()
-    .exec();
+    driveUrl: demoDrive,
+  }).exec();
+  if (!existing && presentedRecordIds.length > 0) {
+    const { presentationId } = await createPresentation(
+      {
+        ventureActivityId: firstActivity._id.toString(),
+        presentedOn: firstActivity.startDate,
+        startTime: '10:00',
+        driveUrl: demoDrive,
+        status: 'HELD',
+        studentRecordIds: presentedRecordIds,
+      },
+      admin._id.toString(),
+    );
+    const participants = await models.PresentationParticipant.find({ presentationId })
+      .select('_id')
+      .lean()
+      .exec();
+    for (const participant of participants) {
+      await setParticipantReceived(participant._id.toString(), true, admin._id.toString());
+      presented += 1;
+    }
+  }
 
-  const { marked: presented } = await setPresentationsReceived(
-    firstActivity._id.toString(),
-    [...new Set([...alreadyReceived.map((r) => r._id.toString()), ...presentedRecordIds])],
-    admin._id.toString(),
-  );
-
-  console.log(`  folder set on the first stage · ${presented} presentation(s) marked received`);
+  console.log(`  presentation added on the first stage · ${presented} student(s) marked received`);
 
   // -------------------------------------------------------- attendance ----
 

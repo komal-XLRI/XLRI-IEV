@@ -22,7 +22,8 @@ const FORM_ID = '1FAIpQLSd_example_published_form_id_abc';
 const TEMPLATE =
   `https://docs.google.com/forms/d/e/${FORM_ID}/viewform?usp=pp_url` +
   '&entry.111=%7B%7BIEV_TOKEN%7D%7D&entry.222=%7B%7BIEV_STUDENT%7D%7D' +
-  '&entry.333=%7B%7BIEV_VENTURE%7D%7D&entry.444=%7B%7BIEV_STAGE%7D%7D';
+  '&entry.333=%7B%7BIEV_VENTURE%7D%7D&entry.444=%7B%7BIEV_STAGE%7D%7D' +
+  '&entry.555=%7B%7BIEV_DATE%7D%7D';
 
 // ------------------------------------------------ Availability (rule 3/4) ----
 
@@ -151,7 +152,7 @@ describe('Google Form pre-filled links', () => {
     const check = checkPrefillTemplate(TEMPLATE);
     expect(check.ok).toBe(true);
     if (check.ok)
-      expect(check.placeholders.sort()).toEqual(['stage', 'student', 'token', 'venture']);
+      expect(check.placeholders.sort()).toEqual(['date', 'stage', 'student', 'token', 'venture']);
   });
 
   it('refuses a template without the token placeholder', () => {
@@ -168,8 +169,10 @@ describe('Google Form pre-filled links', () => {
         student: 'Asha R & Co',
         venture: 'Kiln Café',
         stage: 'Understanding Customers & Market Sizing',
+        date: '10 Sep 2026',
       }),
     );
+    expect(filled.searchParams.get('entry.555')).toBe('10 Sep 2026');
     expect(filled.searchParams.get('usp')).toBe('pp_url');
     expect(filled.searchParams.get('entry.111')).toBe('TOKEN123');
     expect(filled.searchParams.get('entry.222')).toBe('Asha R & Co');

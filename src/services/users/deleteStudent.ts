@@ -5,6 +5,7 @@ import {
   BehaviourFeedback,
   Evidence,
   MentorFeedback,
+  PresentationParticipant,
   Review,
   StudentProfile,
   StudentSupportActivity,
@@ -123,6 +124,11 @@ export async function deleteStudent(userId: string, confirmEmail: string): Promi
     ).exec();
     const feedback = await WorkshopFeedback.deleteMany({ studentId: userId }, opts).exec();
     const mentor = await MentorFeedback.deleteMany(
+      { studentVentureId: { $in: ventureIds } },
+      opts,
+    ).exec();
+    // Their seat in each presentation; the presentations stay as history.
+    await PresentationParticipant.deleteMany(
       { studentVentureId: { $in: ventureIds } },
       opts,
     ).exec();

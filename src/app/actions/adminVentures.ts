@@ -8,8 +8,6 @@ import {
   behaviourFeedbackSchema,
   createStudentVentureSchema,
   createVentureActivitySchema,
-  presentationFolderSchema,
-  presentationsReceivedSchema,
   setSupportMappingsSchema,
   updateStudentVentureSchema,
   updateVentureActivitySchema,
@@ -30,9 +28,16 @@ import {
   updateStudentVenture,
 } from '@/services/ventures/studentVentureService';
 import {
-  setPresentationFolder,
-  setPresentationsReceived,
+  createPresentation,
+  deletePresentation,
+  setParticipantReceived,
+  updatePresentation,
 } from '@/services/ventures/presentationService';
+import {
+  createPresentationSchema,
+  participantReceivedSchema,
+  updatePresentationSchema,
+} from '@/validators/presentations';
 import {
   deleteBehaviourFeedback,
   saveBehaviourFeedback,
@@ -125,52 +130,82 @@ export async function deleteVentureActivityAction(
 
 // ------------------------------------------------------ Presentations ----
 
-function revalidatePresentations(ventureActivityId: string) {
+function revalidatePresentations(ventureActivityId?: string) {
   revalidatePath('/admin/venture-activities');
-  revalidatePath(`/admin/venture-activities/${ventureActivityId}`);
+  if (ventureActivityId) revalidatePath(`/admin/venture-activities/${ventureActivityId}`);
+  else revalidatePath('/admin/venture-activities', 'layout');
   revalidatePath('/student', 'layout');
 }
 
-/** Sets (or, when blank, clears) the Drive folder for a stage's presentations. */
-export async function setPresentationFolderAction(
-  _prev: unknown,
-  formData: FormData,
-): Promise<ActionResult<{ presentationFolderUrl: string | null }>> {
-  return runAction(async () => {
-    await requireAdmin();
-
-    const input = presentationFolderSchema.parse({
-      ventureActivityId: value(formData, 'ventureActivityId'),
-      presentationFolderUrl: submitted(formData, 'presentationFolderUrl') ?? '',
-    });
-
-    await setPresentationFolder(input.ventureActivityId, input.presentationFolderUrl);
-
-    revalidatePresentations(input.ventureActivityId);
-    return { presentationFolderUrl: input.presentationFolderUrl };
-  });
+function presentationForm(formData: FormData) {
+  return {
+    presentedOn: value(formData, 'presentedOn') ?? '',
+    startTime: submitted(formData, 'startTime') ?? '',
+    driveUrl: submitted(formData, 'driveUrl') ?? '',
+    status: value(formData, 'status'),
+    studentRecordIds: values(formData, 'studentRecordIds'),
+  };
 }
 
-/** Saves the checklist of students whose presentation is in the folder. */
-export async function setPresentationsReceivedAction(
+/** Creates one presentation on a stage, with the students chosen for it. */
+export async function createPresentationAction(
   _prev: unknown,
   formData: FormData,
-): Promise<ActionResult<{ marked: number; cleared: number }>> {
+): Promise<ActionResult<{ presentationId: string }>> {
   return runAction(async () => {
     const admin = await requireAdmin();
 
-    const input = presentationsReceivedSchema.parse({
+    const input = createPresentationSchema.parse({
       ventureActivityId: value(formData, 'ventureActivityId'),
-      receivedRecordIds: values(formData, 'receivedRecordIds'),
+      ...presentationForm(formData),
     });
 
-    const result = await setPresentationsReceived(
-      input.ventureActivityId,
-      input.receivedRecordIds,
-      admin.userId,
-    );
-
+    const result = await createPresentation(input, admin.userId);
     revalidatePresentations(input.ventureActivityId);
+    return result;
+  });
+}
+
+/** Edits one presentation — date, time, link, status and students. */
+export async function updatePresentationAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ added: number; removed: number }>> {
+  return runAction(async () => {
+    const admin = await requireAdmin();
+
+    const input = updatePresentationSchema.parse({
+      presentationId: value(formData, 'presentationId'),
+      ...presentationForm(formData),
+    });
+
+    const result = await updatePresentation(input, admin.userId);
+    revalidatePresentations();
+    return result;
+  });
+}
+
+export async function deletePresentationAction(
+  presentationId: string,
+): Promise<ActionResult<{ deleted: true }>> {
+  return runAction(async () => {
+    const admin = await requireAdmin();
+    await deletePresentation(objectId.parse(presentationId), admin.userId);
+    revalidatePresentations();
+    return { deleted: true as const };
+  });
+}
+
+/** Marks one student in one presentation received, or not. */
+export async function setParticipantReceivedAction(
+  participantId: string,
+  received: boolean,
+): Promise<ActionResult<{ received: boolean; stageCompleted: boolean }>> {
+  return runAction(async () => {
+    const admin = await requireAdmin();
+    const input = participantReceivedSchema.parse({ participantId, received });
+    const result = await setParticipantReceived(input.participantId, input.received, admin.userId);
+    revalidatePresentations();
     return result;
   });
 }
@@ -204,27 +239,28 @@ export async function saveFeedbackFormConfigAction(
 }
 
 /**
- * The QR for one presentation. Admin only — students never receive a QR. The
- * service refuses unless the presentation is received and the stage has a
- * usable form, whatever the page that asked believed.
+ * The QR for one student in one presentation. Admin only — students never
+ * receive a QR. The service refuses unless that student's presentation is
+ * received and the stage has a usable form, whatever the page that asked
+ * believed.
  */
 export async function getFeedbackQrAction(
-  recordId: string,
+  participantId: string,
 ): Promise<ActionResult<FeedbackQrResult>> {
   return runAction(async () => {
     await requireAdmin();
-    const id = objectId.parse(recordId);
+    const id = objectId.parse(participantId);
     return getFeedbackQr(id, await publicBaseUrl());
   });
 }
 
-/** Revokes a presentation's QR by issuing a new token. */
+/** Revokes one participant's QR by issuing a new token. */
 export async function regenerateFeedbackTokenAction(
-  recordId: string,
+  participantId: string,
 ): Promise<ActionResult<FeedbackQrResult>> {
   return runAction(async () => {
     await requireAdmin();
-    const id = objectId.parse(recordId);
+    const id = objectId.parse(participantId);
     await regenerateFeedbackToken(id);
     return getFeedbackQr(id, await publicBaseUrl());
   });

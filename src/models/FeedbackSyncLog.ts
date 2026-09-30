@@ -21,6 +21,7 @@ export interface IFeedbackSyncLog {
   publishedFormId?: string | null;
   tokenPrefix?: string | null;
   studentVentureActivityId?: Types.ObjectId | null;
+  participantId?: Types.ObjectId | null;
   mentorFeedbackId?: Types.ObjectId | null;
   createdAt: Date;
 }
@@ -37,6 +38,7 @@ const feedbackSyncLogSchema = new Schema<IFeedbackSyncLog>(
       ref: 'StudentVentureActivity',
       default: null,
     },
+    participantId: { type: Schema.Types.ObjectId, ref: 'PresentationParticipant', default: null },
     mentorFeedbackId: { type: Schema.Types.ObjectId, ref: 'MentorFeedback', default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false }, collection: 'feedbacksynclogs' },

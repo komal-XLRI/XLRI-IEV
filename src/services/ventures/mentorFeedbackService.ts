@@ -6,6 +6,8 @@ import { connectToDatabase } from '@/lib/db/mongoose';
 import {
   FeedbackSyncLog,
   MentorFeedback,
+  Presentation,
+  PresentationParticipant,
   StudentVenture,
   StudentVentureActivity,
   VentureActivity,
@@ -17,6 +19,7 @@ import { NotFoundError, RuleViolationError } from '@/lib/errors';
 import {
   feedbackTally,
   isFeedbackComplete,
+  isParticipantReceived,
   isPresentationReceived,
   supersededResponseIds,
 } from '@/lib/rules/mentorFeedback';
@@ -31,8 +34,18 @@ import {
   type FeedbackFormConfigInput,
   type GoogleFormFeedbackPayload,
 } from '@/validators/mentorFeedback';
+import type { PresentationStatus } from '@/lib/constants/presentations';
+import { formatDate } from '@/lib/utils/dates';
 import { refreshCurrentActivity } from './studentVentureService';
 import { logger } from '@/lib/logger';
+
+/**
+ * Mentor feedback on presentations, through QR codes and Google Forms.
+ *
+ * Everything is keyed on the participant — one student in one presentation.
+ * Its token is what the QR carries, its received mark is what switches the
+ * link on and off, and its responses are what complete the student's stage.
+ */
 
 // ------------------------------------------------------------ Helpers ----
 
@@ -106,7 +119,7 @@ export type FeedbackQrResult =
     }
   | {
       available: false;
-      reason: 'PRESENTATION_PENDING' | 'NO_FORM';
+      reason: 'PRESENTATION_PENDING' | 'PRESENTATION_CANCELLED' | 'NO_FORM';
       message: string;
       details: QrDetails;
     };
@@ -115,55 +128,76 @@ export interface QrDetails {
   studentName: string;
   ventureName: string;
   stage: string;
+  presentedOn: string;
+  startTime: string | null;
+  presentationStatus: PresentationStatus;
   presentationReceived: boolean;
   formConfigured: boolean;
 }
 
-async function loadRecordContext(recordId: string) {
-  const record = await StudentVentureActivity.findById(recordId).lean().exec();
-  if (!record) throw new NotFoundError('Presentation not found');
+async function loadParticipantContext(participantId: string) {
+  const participant = await PresentationParticipant.findById(participantId).lean().exec();
+  if (!participant) throw new NotFoundError('That student is not on this presentation');
 
-  const [activity, venture] = await Promise.all([
-    VentureActivity.findById(record.ventureActivityId).lean().exec(),
-    StudentVenture.findById(record.studentVentureId)
+  const [presentation, activity, venture] = await Promise.all([
+    Presentation.findById(participant.presentationId).lean().exec(),
+    VentureActivity.findById(participant.ventureActivityId).lean().exec(),
+    StudentVenture.findById(participant.studentVentureId)
       .select('ventureName studentId')
       .populate<{ studentId: { _id: Types.ObjectId; name: string } | null }>('studentId', 'name')
       .lean()
       .exec(),
   ]);
+  if (!presentation) throw new NotFoundError('Presentation not found');
   if (!activity) throw new NotFoundError('Venture activity not found');
   if (!venture) throw new NotFoundError('Venture not found');
 
-  return { record, activity, venture };
+  return { participant, presentation, activity, venture };
 }
 
 /**
- * The QR for one presentation — admin only, enforced by the caller.
+ * The QR for one student in one presentation — admin only, enforced by the
+ * caller.
  *
- * Refuses (with a reason, not an error) unless the presentation is received
- * and the stage has a usable form, so an unusable QR is never produced. The
- * token is issued here, lazily, the first time it is needed.
+ * Refuses (with a reason, not an error) unless that student's presentation is
+ * received and the stage has a usable form, so an unusable QR is never
+ * produced. The token is issued here, lazily, the first time it is needed.
  */
-export async function getFeedbackQr(recordId: string, baseUrl: string): Promise<FeedbackQrResult> {
+export async function getFeedbackQr(
+  participantId: string,
+  baseUrl: string,
+): Promise<FeedbackQrResult> {
   await connectToDatabase();
 
-  const { record, activity, venture } = await loadRecordContext(recordId);
-  const received = isPresentationReceived(record);
+  const { participant, presentation, activity, venture } =
+    await loadParticipantContext(participantId);
+  const received = isParticipantReceived(participant, presentation);
   const form = usableForm(activity.feedbackForm);
 
   const details: QrDetails = {
     studentName: venture.studentId?.name ?? 'Unknown student',
     ventureName: venture.ventureName,
     stage: `${activity.activityCode} · ${activity.name}`,
+    presentedOn: presentation.presentedOn.toISOString(),
+    startTime: presentation.startTime ?? null,
+    presentationStatus: presentation.status,
     presentationReceived: received,
     formConfigured: form !== null,
   };
 
+  if (presentation.status === 'CANCELLED') {
+    return {
+      available: false,
+      reason: 'PRESENTATION_CANCELLED',
+      message: 'This presentation is cancelled, so it has no feedback QR.',
+      details,
+    };
+  }
   if (!received) {
     return {
       available: false,
       reason: 'PRESENTATION_PENDING',
-      message: 'This presentation has not been received yet, so it has no feedback QR.',
+      message: 'This student’s presentation has not been received yet, so it has no feedback QR.',
       details,
     };
   }
@@ -176,12 +210,12 @@ export async function getFeedbackQr(recordId: string, baseUrl: string): Promise<
     };
   }
 
-  let token = record.feedbackToken ?? null;
+  let token = participant.feedbackToken ?? null;
   if (!token) {
     // Conditional on the field still being empty, so two admins opening the
     // same QR at once end up with one token rather than two.
-    const claimed = await StudentVentureActivity.findOneAndUpdate(
-      { _id: record._id, feedbackToken: null },
+    const claimed = await PresentationParticipant.findOneAndUpdate(
+      { _id: participant._id, feedbackToken: null },
       { $set: { feedbackToken: newToken(), feedbackTokenCreatedAt: new Date() } },
       { returnDocument: 'after' },
     )
@@ -190,11 +224,15 @@ export async function getFeedbackQr(recordId: string, baseUrl: string): Promise<
       .exec();
     token =
       claimed?.feedbackToken ??
-      (await StudentVentureActivity.findById(record._id).select('feedbackToken').lean().exec())
-        ?.feedbackToken ??
+      (
+        await PresentationParticipant.findById(participant._id)
+          .select('feedbackToken')
+          .lean()
+          .exec()
+      )?.feedbackToken ??
       null;
     if (!token) throw new Error('Could not issue a feedback token');
-    logger.info('Feedback token issued', { recordId, tokenPrefix: tokenPrefix(token) });
+    logger.info('Feedback token issued', { participantId, tokenPrefix: tokenPrefix(token) });
   }
 
   const url = feedbackUrlFor(baseUrl, token);
@@ -207,30 +245,36 @@ export async function getFeedbackQr(recordId: string, baseUrl: string): Promise<
 }
 
 /**
- * Replaces a presentation's token, so a QR that has been shared too widely
- * stops working. Feedback already received stays attached to the presentation.
+ * Replaces a participant's token, so a QR that has been shared too widely
+ * stops working. Feedback already received stays attached to the participant.
  */
-export async function regenerateFeedbackToken(recordId: string) {
+export async function regenerateFeedbackToken(participantId: string) {
   await connectToDatabase();
 
-  const record = await StudentVentureActivity.findById(recordId)
-    .select('status presentationReceivedAt feedbackToken')
+  const participant = await PresentationParticipant.findById(participantId)
+    .select('presentationId receivedAt feedbackToken')
     .lean()
     .exec();
-  if (!record) throw new NotFoundError('Presentation not found');
-  if (!isPresentationReceived(record)) {
-    throw new RuleViolationError('This presentation has not been received, so it has no QR.');
+  if (!participant) throw new NotFoundError('That student is not on this presentation');
+  const presentation = await Presentation.findById(participant.presentationId)
+    .select('status')
+    .lean()
+    .exec();
+  if (!presentation || !isParticipantReceived(participant, presentation)) {
+    throw new RuleViolationError(
+      'This student’s presentation has not been received, so it has no QR.',
+    );
   }
 
   const token = newToken();
-  await StudentVentureActivity.updateOne(
-    { _id: record._id },
+  await PresentationParticipant.updateOne(
+    { _id: participant._id },
     { $set: { feedbackToken: token, feedbackTokenCreatedAt: new Date() } },
   ).exec();
 
   logger.info('Feedback token regenerated', {
-    recordId,
-    previous: tokenPrefix(record.feedbackToken),
+    participantId,
+    previous: tokenPrefix(participant.feedbackToken),
     tokenPrefix: tokenPrefix(token),
   });
 }
@@ -250,17 +294,26 @@ export async function resolveFeedbackLink(token: string): Promise<FeedbackLinkRe
 
   await connectToDatabase();
 
-  const record = await StudentVentureActivity.findOne({ feedbackToken: token }).lean().exec();
-  if (!record) return { ok: false, reason: 'INVALID' };
+  const participant = await PresentationParticipant.findOne({ feedbackToken: token })
+    .select('_id')
+    .lean()
+    .exec();
+  if (!participant) return { ok: false, reason: 'INVALID' };
 
-  if (!isPresentationReceived(record)) {
+  const {
+    participant: current,
+    presentation,
+    activity,
+    venture,
+  } = await loadParticipantContext(participant._id.toString());
+
+  if (!isParticipantReceived(current, presentation)) {
     logger.info('Feedback link used while presentation pending', {
       tokenPrefix: tokenPrefix(token),
     });
     return { ok: false, reason: 'PENDING' };
   }
 
-  const { activity, venture } = await loadRecordContext(record._id.toString());
   if (!activity.feedbackForm) return { ok: false, reason: 'NO_FORM' };
   if (!usableForm(activity.feedbackForm) || activity.status !== 'ACTIVE') {
     return { ok: false, reason: 'UNAVAILABLE' };
@@ -271,11 +324,13 @@ export async function resolveFeedbackLink(token: string): Promise<FeedbackLinkRe
     student: venture.studentId?.name ?? '',
     venture: venture.ventureName,
     stage: activity.name,
+    date: formatDate(presentation.presentedOn),
   });
 
   logger.info('Feedback link opened', {
     tokenPrefix: tokenPrefix(token),
     ventureActivityId: activity._id.toString(),
+    presentationId: presentation._id.toString(),
   });
   return { ok: true, formUrl };
 }
@@ -298,6 +353,7 @@ async function logSync(entry: {
   payload: GoogleFormFeedbackPayload;
   publishedFormId?: string | null;
   recordId?: Types.ObjectId | null;
+  participantId?: Types.ObjectId | null;
   mentorFeedbackId?: Types.ObjectId | null;
 }) {
   try {
@@ -308,6 +364,7 @@ async function logSync(entry: {
       publishedFormId: entry.publishedFormId ?? null,
       tokenPrefix: tokenPrefix(entry.payload.token),
       studentVentureActivityId: entry.recordId ?? null,
+      participantId: entry.participantId ?? null,
       mentorFeedbackId: entry.mentorFeedbackId ?? null,
     });
   } catch (error) {
@@ -323,7 +380,11 @@ async function reject(
   status: number,
   reason: string,
   message: string,
-  extra: { publishedFormId?: string | null; recordId?: Types.ObjectId | null } = {},
+  extra: {
+    publishedFormId?: string | null;
+    recordId?: Types.ObjectId | null;
+    participantId?: Types.ObjectId | null;
+  } = {},
 ): Promise<IngestResult> {
   logger.warn('Mentor feedback rejected', {
     reason,
@@ -337,10 +398,10 @@ async function reject(
 /**
  * Stores one Google Form response forwarded by the Apps Script.
  *
- * The token must belong to a presentation that is received right now, and the
+ * The token must belong to a participant who is received right now, and the
  * response must come from the form configured for that presentation's stage.
  * Duplicates: the same Google response id updates in place; a new response
- * from the same mentor on the same presentation supersedes their earlier one.
+ * from the same mentor on the same participant supersedes their earlier one.
  */
 export async function ingestGoogleFormFeedback(
   payload: GoogleFormFeedbackPayload,
@@ -361,36 +422,42 @@ export async function ingestGoogleFormFeedback(
     );
   }
 
-  const record = await StudentVentureActivity.findOne({ feedbackToken: payload.token })
+  const participant = await PresentationParticipant.findOne({ feedbackToken: payload.token })
     .lean()
     .exec();
-  if (!record) {
+  if (!participant) {
     return reject(payload, 404, 'UNKNOWN_TOKEN', 'No presentation matches this presentation ID.', {
       publishedFormId,
     });
   }
+  const ids = {
+    publishedFormId,
+    recordId: participant.studentVentureActivityId,
+    participantId: participant._id,
+  };
 
-  if (!isPresentationReceived(record)) {
+  const presentation = await Presentation.findById(participant.presentationId)
+    .select('status')
+    .lean()
+    .exec();
+  if (!presentation || !isParticipantReceived(participant, presentation)) {
     return reject(
       payload,
       409,
       'PRESENTATION_NOT_RECEIVED',
       'This presentation has not been received. Feedback is currently unavailable.',
-      { publishedFormId, recordId: record._id },
+      ids,
     );
   }
 
-  const activity = await VentureActivity.findById(record.ventureActivityId).lean().exec();
+  const activity = await VentureActivity.findById(participant.ventureActivityId).lean().exec();
   if (!activity?.feedbackForm) {
     return reject(
       payload,
       409,
       'NO_FORM_CONFIGURED',
       'Feedback form is not configured for this stage.',
-      {
-        publishedFormId,
-        recordId: record._id,
-      },
+      ids,
     );
   }
   if (!usableForm(activity.feedbackForm)) {
@@ -399,10 +466,7 @@ export async function ingestGoogleFormFeedback(
       409,
       'FORM_DISABLED',
       'Feedback is currently unavailable for this stage.',
-      {
-        publishedFormId,
-        recordId: record._id,
-      },
+      ids,
     );
   }
   if (!publishedFormId || publishedFormId !== activity.feedbackForm.publishedFormId) {
@@ -411,19 +475,8 @@ export async function ingestGoogleFormFeedback(
       409,
       'FORM_MISMATCH',
       'This response came from a form that is not the one configured for the presentation’s stage.',
-      { publishedFormId, recordId: record._id },
+      ids,
     );
-  }
-
-  const venture = await StudentVenture.findById(record.studentVentureId)
-    .select('studentId')
-    .lean()
-    .exec();
-  if (!venture) {
-    return reject(payload, 409, 'VENTURE_MISSING', 'The presentation’s venture no longer exists.', {
-      publishedFormId,
-      recordId: record._id,
-    });
   }
 
   const responses: IMentorFeedbackAnswer[] = payload.answers
@@ -431,7 +484,7 @@ export async function ingestGoogleFormFeedback(
     .map((item) => ({ question: item.question, type: item.type, answer: item.answer }));
 
   const previous = await MentorFeedback.findOne({ googleResponseId: payload.responseId })
-    .select('_id studentVentureActivityId')
+    .select('_id participantId studentVentureActivityId')
     .lean()
     .exec();
 
@@ -439,10 +492,12 @@ export async function ingestGoogleFormFeedback(
     { googleResponseId: payload.responseId },
     {
       $set: {
-        studentVentureActivityId: record._id,
-        studentVentureId: record.studentVentureId,
-        studentId: venture.studentId,
-        ventureActivityId: record.ventureActivityId,
+        presentationId: participant.presentationId,
+        participantId: participant._id,
+        studentVentureActivityId: participant.studentVentureActivityId,
+        studentVentureId: participant.studentVentureId,
+        studentId: participant.studentId,
+        ventureActivityId: participant.ventureActivityId,
         googleFormId: payload.formId,
         publishedFormId,
         mentorName: payload.mentorName ?? fallbackMentorName(payload.respondentEmail),
@@ -458,27 +513,26 @@ export async function ingestGoogleFormFeedback(
     .lean()
     .exec();
 
-  await recomputeSuperseded(record._id);
-  if (previous && !previous.studentVentureActivityId.equals(record._id)) {
-    // An edited response now names a different presentation; the old one's
+  await recomputeSuperseded({ participantId: participant._id });
+  if (previous && !previous.participantId?.equals(participant._id)) {
+    // An edited response now names a different participant; the old one's
     // counts change too.
-    await recomputeSuperseded(previous.studentVentureActivityId);
+    await recomputeSuperseded(
+      previous.participantId
+        ? { participantId: previous.participantId }
+        : { recordId: previous.studentVentureActivityId },
+    );
   }
 
-  const stageCompleted = await evaluateCompletion(record._id.toString());
+  const stageCompleted = await evaluateParticipantCompletion(participant._id.toString());
 
   const outcome: FeedbackSyncOutcome = previous ? 'UPDATED' : 'ACCEPTED';
-  await logSync({
-    outcome,
-    payload,
-    publishedFormId,
-    recordId: record._id,
-    mentorFeedbackId: saved!._id,
-  });
+  await logSync({ outcome, payload, ...ids, mentorFeedbackId: saved!._id });
   logger.info(previous ? 'Mentor feedback updated' : 'Mentor feedback received', {
     googleResponseId: payload.responseId,
-    recordId: record._id.toString(),
-    ventureActivityId: record.ventureActivityId.toString(),
+    participantId: participant._id.toString(),
+    presentationId: participant.presentationId.toString(),
+    ventureActivityId: participant.ventureActivityId.toString(),
     stageCompleted,
   });
 
@@ -495,9 +549,19 @@ function fallbackMentorName(email: string | null | undefined): string | null {
   return email ? email.split('@')[0]! : null;
 }
 
-/** Marks every response but the latest per mentor as superseded, for one presentation. */
-async function recomputeSuperseded(recordId: Types.ObjectId) {
-  const docs = await MentorFeedback.find({ studentVentureActivityId: recordId })
+/**
+ * Marks every response but the latest per mentor as superseded, for one
+ * participant — or, for feedback stored before participants existed, for one
+ * stage record's unassigned responses.
+ */
+async function recomputeSuperseded(
+  group: { participantId: Types.ObjectId } | { recordId: Types.ObjectId },
+) {
+  const filter =
+    'participantId' in group
+      ? { participantId: group.participantId }
+      : { studentVentureActivityId: group.recordId, participantId: null };
+  const docs = await MentorFeedback.find(filter)
     .select('_id submittedAt mentorEmail googleResponseId superseded')
     .lean()
     .exec();
@@ -527,29 +591,40 @@ async function recomputeSuperseded(recordId: Types.ObjectId) {
 // ------------------------------------------------------ Completion ----
 
 /**
- * Completes the stage for one presentation once it is received and has the
- * required number of counted responses. Moves forward only: nothing here ever
- * takes a COMPLETED record back.
+ * Completes the student's stage once one of their presentations on it is
+ * received and has the required number of counted responses. Moves forward
+ * only: nothing here ever takes a COMPLETED record back.
  */
-async function evaluateCompletion(recordId: string): Promise<boolean> {
-  const record = await StudentVentureActivity.findById(recordId).lean().exec();
-  if (!record || record.status === 'COMPLETED') return false;
-
-  const activity = await VentureActivity.findById(record.ventureActivityId)
-    .select('feedbackForm')
+export async function evaluateParticipantCompletion(participantId: string): Promise<boolean> {
+  const participant = await PresentationParticipant.findById(participantId)
+    .select(
+      '_id presentationId studentVentureActivityId studentVentureId ventureActivityId receivedAt',
+    )
     .lean()
     .exec();
+  if (!participant) return false;
+
+  const [record, presentation, activity] = await Promise.all([
+    StudentVentureActivity.findById(participant.studentVentureActivityId)
+      .select('status')
+      .lean()
+      .exec(),
+    Presentation.findById(participant.presentationId).select('status').lean().exec(),
+    VentureActivity.findById(participant.ventureActivityId).select('feedbackForm').lean().exec(),
+  ]);
+  if (!record || record.status === 'COMPLETED' || !presentation) return false;
+
   const form = usableForm(activity?.feedbackForm);
   if (!form) return false;
 
   const counted = await MentorFeedback.countDocuments({
-    studentVentureActivityId: record._id,
+    participantId: participant._id,
     superseded: false,
   }).exec();
 
   if (
     !isFeedbackComplete({
-      received: isPresentationReceived(record),
+      received: isParticipantReceived(participant, presentation),
       countedResponses: counted,
       requiredFeedbackCount: form.requiredFeedbackCount,
     })
@@ -557,32 +632,41 @@ async function evaluateCompletion(recordId: string): Promise<boolean> {
     return false;
   }
 
-  // Conditional on the record still being uncompleted and still received, so a
-  // presentation unticked a moment ago is not completed by a late response.
+  // Re-checked at the last moment, so a student unticked a moment ago is not
+  // completed by a late response.
+  if (
+    !(await PresentationParticipant.exists({ _id: participant._id, receivedAt: { $ne: null } }))
+  ) {
+    return false;
+  }
+
   const result = await StudentVentureActivity.updateOne(
-    { _id: record._id, status: { $ne: 'COMPLETED' }, presentationReceivedAt: { $ne: null } },
+    {
+      _id: participant.studentVentureActivityId,
+      status: { $ne: 'COMPLETED' },
+      presentationReceivedAt: { $ne: null },
+    },
     { $set: { status: 'COMPLETED', completedAt: new Date() } },
   ).exec();
   if (result.modifiedCount === 0) return false;
 
-  await refreshCurrentActivity(record.studentVentureId.toString());
-  logger.info('Stage completed on mentor feedback', { recordId, counted });
+  await refreshCurrentActivity(participant.studentVentureId.toString());
+  logger.info('Stage completed on mentor feedback', { participantId, counted });
   return true;
 }
 
 async function reevaluateStageCompletion(ventureActivityId: string): Promise<number> {
-  const records = await StudentVentureActivity.find({
+  const participants = await PresentationParticipant.find({
     ventureActivityId,
-    status: { $ne: 'COMPLETED' },
-    presentationReceivedAt: { $ne: null },
+    receivedAt: { $ne: null },
   })
     .select('_id')
     .lean()
     .exec();
 
   let completed = 0;
-  for (const record of records) {
-    if (await evaluateCompletion(record._id.toString())) completed += 1;
+  for (const participant of participants) {
+    if (await evaluateParticipantCompletion(participant._id.toString())) completed += 1;
   }
   return completed;
 }
@@ -620,7 +704,7 @@ function toEntry(
   };
 }
 
-export interface RecordFeedbackSummary {
+export interface ParticipantFeedbackSummary {
   counted: number;
   required: number;
   complete: boolean;
@@ -631,7 +715,9 @@ export interface StageFeedback {
   formEnabled: boolean;
   requiredFeedbackCount: number;
   prefillUrlTemplate: string | null;
-  byRecord: Record<string, RecordFeedbackSummary & { entries: MentorFeedbackEntry[] }>;
+  /** Keyed by participant id — one student in one presentation. */
+  byParticipant: Record<string, ParticipantFeedbackSummary & { entries: MentorFeedbackEntry[] }>;
+  /** Out of received participants only. */
   tally: ReturnType<typeof feedbackTally>;
 }
 
@@ -639,35 +725,42 @@ export interface StageFeedback {
 export async function getStageFeedback(ventureActivityId: string): Promise<StageFeedback> {
   await connectToDatabase();
 
-  const [activity, records, docs] = await Promise.all([
+  const [activity, participants, presentations, docs] = await Promise.all([
     VentureActivity.findById(ventureActivityId).select('feedbackForm').lean().exec(),
-    StudentVentureActivity.find({ ventureActivityId })
-      .select('_id status presentationReceivedAt')
+    PresentationParticipant.find({ ventureActivityId })
+      .select('_id presentationId receivedAt')
       .lean()
       .exec(),
-    MentorFeedback.find({ ventureActivityId }).sort({ submittedAt: -1 }).lean().exec(),
+    Presentation.find({ ventureActivityId }).select('_id status').lean().exec(),
+    MentorFeedback.find({ ventureActivityId, participantId: { $ne: null } })
+      .sort({ submittedAt: -1 })
+      .lean()
+      .exec(),
   ]);
   if (!activity) throw new NotFoundError('Venture activity not found');
 
   const form = activity.feedbackForm ?? null;
   const required = form?.requiredFeedbackCount ?? 1;
+  const statusById = new Map(presentations.map((p) => [p._id.toString(), p.status]));
 
-  const entriesByRecord = new Map<string, MentorFeedbackEntry[]>();
+  const entriesByParticipant = new Map<string, MentorFeedbackEntry[]>();
   for (const doc of docs) {
-    const key = doc.studentVentureActivityId.toString();
-    const list = entriesByRecord.get(key) ?? [];
+    const key = doc.participantId!.toString();
+    const list = entriesByParticipant.get(key) ?? [];
     list.push(toEntry(doc, true));
-    entriesByRecord.set(key, list);
+    entriesByParticipant.set(key, list);
   }
 
-  const byRecord: StageFeedback['byRecord'] = {};
+  const byParticipant: StageFeedback['byParticipant'] = {};
   const tallyInput: Array<{ received: boolean; countedResponses: number }> = [];
-  for (const record of records) {
-    const key = record._id.toString();
-    const entries = entriesByRecord.get(key) ?? [];
+  for (const participant of participants) {
+    const key = participant._id.toString();
+    const entries = entriesByParticipant.get(key) ?? [];
     const counted = entries.filter((e) => !e.superseded).length;
-    const received = isPresentationReceived(record);
-    byRecord[key] = {
+    const received = isParticipantReceived(participant, {
+      status: statusById.get(participant.presentationId.toString()) ?? 'CANCELLED',
+    });
+    byParticipant[key] = {
       counted,
       required,
       complete: isFeedbackComplete({
@@ -685,15 +778,27 @@ export async function getStageFeedback(ventureActivityId: string): Promise<Stage
     formEnabled: Boolean(form?.enabled),
     requiredFeedbackCount: required,
     prefillUrlTemplate: form?.prefillUrlTemplate ?? null,
-    byRecord,
+    byParticipant,
     tally: feedbackTally(tallyInput, required),
   };
 }
 
+export interface StudentPresentationFeedback {
+  participantId: string;
+  presentedOn: string;
+  startTime: string | null;
+  driveUrl: string | null;
+  status: PresentationStatus;
+  received: boolean;
+  counted: number;
+  complete: boolean;
+  entries: MentorFeedbackEntry[];
+}
+
 /**
- * A student's own feedback on one presentation. The caller has already
- * checked that the record is theirs; mentor emails are never included.
- * Only the counted (latest per mentor) responses are shown.
+ * A student's own presentations on one stage and the feedback on each. The
+ * caller has already checked that the record is theirs; mentor emails are
+ * never included, and only counted (latest per mentor) responses are shown.
  */
 export async function getStudentMentorFeedback(recordId: string) {
   await connectToDatabase();
@@ -702,30 +807,77 @@ export async function getStudentMentorFeedback(recordId: string) {
     .select('ventureActivityId status presentationReceivedAt')
     .lean()
     .exec();
-  if (!record) throw new NotFoundError('Presentation not found');
+  if (!record) throw new NotFoundError('Activity record not found');
 
-  const [activity, docs] = await Promise.all([
+  const [activity, participants, docs] = await Promise.all([
     VentureActivity.findById(record.ventureActivityId).select('feedbackForm').lean().exec(),
+    PresentationParticipant.find({ studentVentureActivityId: record._id })
+      .select('_id presentationId receivedAt')
+      .lean()
+      .exec(),
     MentorFeedback.find({ studentVentureActivityId: record._id, superseded: false })
       .sort({ submittedAt: 1 })
       .lean()
       .exec(),
   ]);
+  const presentations = await Presentation.find({
+    _id: { $in: participants.map((p) => p.presentationId) },
+  })
+    .lean()
+    .exec();
+  const presentationById = new Map(presentations.map((p) => [p._id.toString(), p]));
 
   const required = activity?.feedbackForm?.requiredFeedbackCount ?? 1;
-  const received = isPresentationReceived(record);
 
+  const entriesByParticipant = new Map<string, MentorFeedbackEntry[]>();
+  const earlier: MentorFeedbackEntry[] = [];
+  for (const doc of docs) {
+    if (!doc.participantId) {
+      earlier.push(toEntry(doc, false));
+      continue;
+    }
+    const key = doc.participantId.toString();
+    const list = entriesByParticipant.get(key) ?? [];
+    list.push(toEntry(doc, false));
+    entriesByParticipant.set(key, list);
+  }
+
+  const mine: StudentPresentationFeedback[] = participants
+    .flatMap((participant) => {
+      const presentation = presentationById.get(participant.presentationId.toString());
+      if (!presentation) return [];
+      const entries = entriesByParticipant.get(participant._id.toString()) ?? [];
+      const received = isParticipantReceived(participant, presentation);
+      return [
+        {
+          participantId: participant._id.toString(),
+          presentedOn: presentation.presentedOn.toISOString(),
+          startTime: presentation.startTime ?? null,
+          driveUrl: presentation.driveUrl ?? null,
+          status: presentation.status,
+          received,
+          counted: entries.length,
+          complete: isFeedbackComplete({
+            received,
+            countedResponses: entries.length,
+            requiredFeedbackCount: required,
+          }),
+          entries,
+        },
+      ];
+    })
+    .sort((a, b) => a.presentedOn.localeCompare(b.presentedOn));
+
+  const counted = docs.length;
   return {
     formConfigured: Boolean(activity?.feedbackForm),
-    received,
+    received: isPresentationReceived(record),
     required,
-    counted: docs.length,
-    complete: isFeedbackComplete({
-      received,
-      countedResponses: docs.length,
-      requiredFeedbackCount: required,
-    }),
-    entries: docs.map((doc) => toEntry(doc, false)),
+    counted,
+    complete: mine.some((p) => p.complete),
+    presentations: mine,
+    /** Feedback given before presentations were recorded one by one. */
+    earlierEntries: earlier,
   };
 }
 
@@ -735,37 +887,38 @@ export async function getFeedbackTallies(): Promise<
 > {
   await connectToDatabase();
 
-  const [activities, records, counts] = await Promise.all([
+  const [activities, participants, presentations, counts] = await Promise.all([
     VentureActivity.find().select('_id feedbackForm').lean().exec(),
-    StudentVentureActivity.find()
-      .select('_id ventureActivityId status presentationReceivedAt')
+    PresentationParticipant.find()
+      .select('_id ventureActivityId presentationId receivedAt')
       .lean()
       .exec(),
+    Presentation.find().select('_id status').lean().exec(),
     MentorFeedback.aggregate<{ _id: Types.ObjectId; counted: number }>([
-      { $match: { superseded: false } },
-      { $group: { _id: '$studentVentureActivityId', counted: { $sum: 1 } } },
+      { $match: { superseded: false, participantId: { $ne: null } } },
+      { $group: { _id: '$participantId', counted: { $sum: 1 } } },
     ]).exec(),
   ]);
 
-  const countedByRecord = new Map(counts.map((row) => [row._id.toString(), row.counted]));
-  const recordsByActivity = new Map<
-    string,
-    Array<{ received: boolean; countedResponses: number }>
-  >();
-  for (const record of records) {
-    const key = record.ventureActivityId.toString();
-    const list = recordsByActivity.get(key) ?? [];
+  const countedByParticipant = new Map(counts.map((row) => [row._id.toString(), row.counted]));
+  const statusById = new Map(presentations.map((p) => [p._id.toString(), p.status]));
+  const byActivity = new Map<string, Array<{ received: boolean; countedResponses: number }>>();
+  for (const participant of participants) {
+    const key = participant.ventureActivityId.toString();
+    const list = byActivity.get(key) ?? [];
     list.push({
-      received: isPresentationReceived(record),
-      countedResponses: countedByRecord.get(record._id.toString()) ?? 0,
+      received: isParticipantReceived(participant, {
+        status: statusById.get(participant.presentationId.toString()) ?? 'CANCELLED',
+      }),
+      countedResponses: countedByParticipant.get(participant._id.toString()) ?? 0,
     });
-    recordsByActivity.set(key, list);
+    byActivity.set(key, list);
   }
 
   return Object.fromEntries(
     activities.map((activity) => {
       const tally = feedbackTally(
-        recordsByActivity.get(activity._id.toString()) ?? [],
+        byActivity.get(activity._id.toString()) ?? [],
         activity.feedbackForm?.requiredFeedbackCount ?? 1,
       );
       return [

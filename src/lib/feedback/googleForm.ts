@@ -12,6 +12,7 @@ export const FEEDBACK_PLACEHOLDERS = {
   student: '{{IEV_STUDENT}}',
   venture: '{{IEV_VENTURE}}',
   stage: '{{IEV_STAGE}}',
+  date: '{{IEV_DATE}}',
 } as const;
 
 export type FeedbackPlaceholderValues = Record<keyof typeof FEEDBACK_PLACEHOLDERS, string>;

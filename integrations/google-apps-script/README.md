@@ -48,6 +48,7 @@ Do this for each stage's form. Nothing in the portal's code changes per stage.
    - Student/Team → `{{IEV_STUDENT}}` *(optional)*
    - Venture → `{{IEV_VENTURE}}` *(optional)*
    - Stage → `{{IEV_STAGE}}` *(optional)*
+   - Presentation date → `{{IEV_DATE}}` *(optional)*
 
    Click *Get link* → *Copy link*. It must be the long
    `https://docs.google.com/forms/d/e/…/viewform?usp=pp_url&entry…` link, not a

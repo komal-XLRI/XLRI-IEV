@@ -16,7 +16,10 @@ import {
 } from '@/services/ventures/ventureActivityService';
 import { getActivityCompletionReport } from '@/services/reports/reportService';
 import { getAttendanceBoard } from '@/services/ventures/attendanceService';
-import { getPresentationTallies } from '@/services/ventures/presentationService';
+import {
+  getPresentationCounts,
+  getPresentationTallies,
+} from '@/services/ventures/presentationService';
 import { getBehaviourTallies } from '@/services/ventures/behaviourService';
 import { getFeedbackTallies } from '@/services/ventures/mentorFeedbackService';
 import { presentationStageState } from '@/lib/rules/presentations';
@@ -43,6 +46,7 @@ export default async function VentureActivitiesPage() {
     tallies,
     behaviourTallies,
     feedbackTallies,
+    presentationCounts,
   ] = await Promise.all([
     listVentureActivities(),
     listTerms(),
@@ -53,6 +57,7 @@ export default async function VentureActivitiesPage() {
     getPresentationTallies(),
     getBehaviourTallies(),
     getFeedbackTallies(),
+    getPresentationCounts(),
   ]);
 
   const supportCodeById = new Map(supports.map((s) => [s._id.toString(), s.activityCode]));
@@ -73,7 +78,7 @@ export default async function VentureActivitiesPage() {
       startDate: activity.startDate ? activity.startDate.toISOString() : null,
       endDate: activity.endDate ? activity.endDate.toISOString() : null,
       durationDays: activity.durationDays,
-      presentationFolderUrl: activity.presentationFolderUrl ?? null,
+      presentationCount: presentationCounts[id] ?? 0,
       presentationsReceived: tally.received,
       presentationStage: presentationStageState(tally),
       behaviourGiven: behaviourTallies[id] ?? 0,

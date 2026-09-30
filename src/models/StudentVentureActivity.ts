@@ -45,20 +45,12 @@ export interface IStudentVentureActivity {
   currentSubmissionId?: Types.ObjectId | null;
 
   /**
-   * When the administrator confirmed this student's presentation is in the
-   * activity's Drive folder, and who confirmed it. Null until then.
+   * When this student first presented on this stage, and who marked it — a
+   * summary kept in step with their `PresentationParticipant` rows, where each
+   * presentation's own received mark lives. Null while none is received.
    */
   presentationReceivedAt?: Date | null;
   presentationMarkedBy?: Types.ObjectId | null;
-
-  /**
-   * The secret in this presentation's mentor-feedback QR. Issued lazily, the
-   * first time an administrator asks for the QR of a received presentation.
-   * Holding it grants nothing on its own: it only works while the presentation
-   * is received, which is checked live on every use.
-   */
-  feedbackToken?: string | null;
-  feedbackTokenCreatedAt?: Date | null;
 
   startedAt?: Date | null;
   completedAt?: Date | null;
@@ -100,9 +92,6 @@ const studentVentureActivitySchema = new Schema<IStudentVentureActivity>(
     presentationReceivedAt: { type: Date, default: null },
     presentationMarkedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
 
-    feedbackToken: { type: String, default: null },
-    feedbackTokenCreatedAt: { type: Date, default: null },
-
     startedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
   },
@@ -113,12 +102,6 @@ studentVentureActivitySchema.index({ studentVentureId: 1, ventureActivityId: 1 }
 studentVentureActivitySchema.index({ facultyId: 1, facultyReviewStatus: 1 });
 studentVentureActivitySchema.index({ mentorId: 1, mentorReviewStatus: 1 });
 studentVentureActivitySchema.index({ status: 1 });
-// Partial rather than sparse: the field defaults to null, and a sparse unique
-// index still indexes explicit nulls — every record without a token would clash.
-studentVentureActivitySchema.index(
-  { feedbackToken: 1 },
-  { unique: true, partialFilterExpression: { feedbackToken: { $type: 'string' } } },
-);
 
 export const StudentVentureActivity: Model<IStudentVentureActivity> =
   registerModel<IStudentVentureActivity>('StudentVentureActivity', studentVentureActivitySchema);

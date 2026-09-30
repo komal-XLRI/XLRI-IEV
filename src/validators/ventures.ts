@@ -51,34 +51,6 @@ export const updateVentureActivitySchema = z
     path: ['endDate'],
   });
 
-// ------------------------------------------------------ Presentations ----
-
-/**
- * The stage's shared Drive folder. Blank clears it. Only https links are
- * accepted: the link is rendered as an anchor for students, so a javascript:
- * or data: URL must never get this far.
- */
-export const presentationFolderSchema = z.object({
-  ventureActivityId: objectId,
-  presentationFolderUrl: z
-    .string()
-    .trim()
-    .max(2000)
-    .refine((v) => v === '' || /^https:\/\/\S+$/i.test(v), {
-      message: 'Paste the full https:// link to the folder',
-    })
-    .transform((v) => (v === '' ? null : v)),
-});
-
-/**
- * Replaces the full set of received presentations for one venture activity:
- * every record listed is marked received, every record not listed is cleared.
- */
-export const presentationsReceivedSchema = z.object({
-  ventureActivityId: objectId,
-  receivedRecordIds: z.array(objectId).max(2000),
-});
-
 // ------------------------------------------------- HR & behaviour ----
 
 const behaviourRating = z.coerce

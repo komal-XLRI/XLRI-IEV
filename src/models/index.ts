@@ -31,6 +31,9 @@ export {
   type IVentureActivityAttendance,
 } from './VentureActivityAttendance';
 
+export { Presentation, type IPresentation } from './Presentation';
+export { PresentationParticipant, type IPresentationParticipant } from './PresentationParticipant';
+
 export { BehaviourFeedback, type IBehaviourFeedback } from './BehaviourFeedback';
 export { MentorFeedback, type IMentorFeedback, type IMentorFeedbackAnswer } from './MentorFeedback';
 export {

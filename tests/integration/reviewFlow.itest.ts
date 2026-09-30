@@ -17,7 +17,8 @@ const models = await import('@/models');
 const { createUser } = await import('@/services/users/userService');
 const { createStudentVenture, getVentureProgress } =
   await import('@/services/ventures/studentVentureService');
-const { setPresentationsReceived } = await import('@/services/ventures/presentationService');
+const { createPresentation, setParticipantReceived } =
+  await import('@/services/ventures/presentationService');
 const { writeLegacySubmission } = await import('../support/legacySubmission');
 const { createReview } = await import('@/services/reviews/reviewService');
 const { getPendingReviewAttempts } = await import('@/services/dashboard/dashboardService');
@@ -33,6 +34,7 @@ let ventureId: string;
 let firstActivityRecordId: string;
 let secondActivityRecordId: string;
 let adminId: string;
+const createdPresentationIds: string[] = [];
 
 beforeAll(async () => {
   await connectToDatabase();
@@ -124,6 +126,8 @@ afterAll(async () => {
   await models.VentureSubmission.deleteMany({
     studentVentureActivityId: { $in: records.map((r) => r._id) },
   }).exec();
+  await models.PresentationParticipant.deleteMany({ studentVentureId: ventureId }).exec();
+  await models.Presentation.deleteMany({ _id: { $in: createdPresentationIds } }).exec();
   await models.StudentVentureActivity.deleteMany({ studentVentureId: ventureId }).exec();
   await models.StudentSupportActivity.deleteMany({ studentVentureId: ventureId }).exec();
   await models.StudentVenture.deleteOne({ _id: ventureId }).exec();
@@ -258,43 +262,51 @@ describe('progression lock', () => {
 });
 
 describe('presentations', () => {
-  // The checklist save replaces the whole set for an activity, and these suites
-  // run against a shared, seeded database — so every save here carries over the
-  // marks other students already have, and only ever moves this suite's record.
-  async function othersReceived(ventureActivityId: string): Promise<string[]> {
-    const rows = await models.StudentVentureActivity.find({
-      ventureActivityId,
-      studentVentureId: { $ne: ventureId },
-      presentationReceivedAt: { $ne: null },
-    })
-      .select('_id')
-      .lean()
-      .exec();
-    return rows.map((row) => row._id.toString());
-  }
-
   async function activityOf(recordId: string): Promise<string> {
     const record = await models.StudentVentureActivity.findById(recordId).lean().exec();
     return record!.ventureActivityId.toString();
   }
 
-  it('marks a presentation received and moves the record to PRESENTATION_RECEIVED', async () => {
-    const activityId = await activityOf(secondActivityRecordId);
-    const others = await othersReceived(activityId);
-
-    const result = await setPresentationsReceived(
-      activityId,
-      [...others, secondActivityRecordId],
+  /** Adds a presentation for these records and returns each one's participant id. */
+  async function present(recordIds: string[], presentedOn = '2026-09-10') {
+    const { presentationId } = await createPresentation(
+      {
+        ventureActivityId: await activityOf(recordIds[0]!),
+        presentedOn: new Date(`${presentedOn}T00:00:00.000Z`),
+        startTime: null,
+        driveUrl: 'https://drive.google.com/drive/folders/itest',
+        status: 'HELD',
+        studentRecordIds: recordIds,
+      },
       adminId,
     );
-    expect(result).toEqual({ marked: 1, cleared: 0 });
+    createdPresentationIds.push(presentationId);
+    const rows = await models.PresentationParticipant.find({ presentationId }).lean().exec();
+    return new Map(
+      rows.map((row) => [row.studentVentureActivityId.toString(), row._id.toString()]),
+    );
+  }
 
-    const record = await models.StudentVentureActivity.findById(secondActivityRecordId)
-      .lean()
-      .exec();
-    expect(record!.status).toBe('PRESENTATION_RECEIVED');
-    expect(record!.presentationReceivedAt).not.toBeNull();
-    expect(record!.presentationMarkedBy?.toString()).toBe(adminId);
+  const record = (id: string) => models.StudentVentureActivity.findById(id).lean().exec();
+
+  let firstSitting: string;
+  let secondSitting: string;
+
+  it('adds a presentation without marking anyone received', async () => {
+    firstSitting = (await present([secondActivityRecordId])).get(secondActivityRecordId)!;
+    const participant = await models.PresentationParticipant.findById(firstSitting).lean().exec();
+    expect(participant!.receivedAt).toBeNull();
+    expect((await record(secondActivityRecordId))!.status).toBe('NOT_STARTED');
+  });
+
+  it('marks a student received and moves the record to PRESENTATION_RECEIVED', async () => {
+    const result = await setParticipantReceived(firstSitting, true, adminId);
+    expect(result).toEqual({ received: true, stageCompleted: false });
+
+    const after = await record(secondActivityRecordId);
+    expect(after!.status).toBe('PRESENTATION_RECEIVED');
+    expect(after!.presentationReceivedAt).not.toBeNull();
+    expect(after!.presentationMarkedBy?.toString()).toBe(adminId);
   });
 
   it('does not complete the stage or unlock the next one on a presentation alone', async () => {
@@ -305,49 +317,56 @@ describe('presentations', () => {
     if (next) expect(next.uiState).toBe('LOCKED');
   });
 
-  it('is idempotent — saving the same checklist again changes nothing', async () => {
-    const activityId = await activityOf(secondActivityRecordId);
-    const others = await othersReceived(activityId);
-
-    const result = await setPresentationsReceived(
-      activityId,
-      [...others, secondActivityRecordId],
-      adminId,
-    );
-    expect(result).toEqual({ marked: 0, cleared: 0 });
+  it('is idempotent — ticking again changes nothing', async () => {
+    const before = await record(secondActivityRecordId);
+    await setParticipantReceived(firstSitting, true, adminId);
+    const after = await record(secondActivityRecordId);
+    expect(after!.presentationReceivedAt).toEqual(before!.presentationReceivedAt);
   });
 
-  it('returns the record to NOT_STARTED when the mark is withdrawn', async () => {
-    const activityId = await activityOf(secondActivityRecordId);
-    const others = await othersReceived(activityId);
+  it('lets the same student present again, and stays received while any sitting is', async () => {
+    secondSitting = (await present([secondActivityRecordId], '2026-09-17')).get(
+      secondActivityRecordId,
+    )!;
+    expect(secondSitting).not.toBe(firstSitting);
+    await setParticipantReceived(secondSitting, true, adminId);
 
-    const result = await setPresentationsReceived(activityId, others, adminId);
-    expect(result).toEqual({ marked: 0, cleared: 1 });
+    await setParticipantReceived(firstSitting, false, adminId);
+    const after = await record(secondActivityRecordId);
+    expect(after!.status).toBe('PRESENTATION_RECEIVED');
+    expect(after!.presentationReceivedAt).not.toBeNull();
+  });
 
-    const record = await models.StudentVentureActivity.findById(secondActivityRecordId)
-      .lean()
-      .exec();
-    expect(record!.status).toBe('NOT_STARTED');
-    expect(record!.presentationReceivedAt).toBeNull();
+  it('returns the record to NOT_STARTED when no received sitting is left', async () => {
+    await setParticipantReceived(secondSitting, false, adminId);
+    const after = await record(secondActivityRecordId);
+    expect(after!.status).toBe('NOT_STARTED');
+    expect(after!.presentationReceivedAt).toBeNull();
   });
 
   it('never un-presents a completed stage', async () => {
-    const activityId = await activityOf(firstActivityRecordId);
-    const others = await othersReceived(activityId);
+    const sitting = (await present([firstActivityRecordId])).get(firstActivityRecordId)!;
+    await setParticipantReceived(sitting, true, adminId);
+    await setParticipantReceived(sitting, false, adminId);
 
-    await setPresentationsReceived(activityId, [...others, firstActivityRecordId], adminId);
-    const result = await setPresentationsReceived(activityId, others, adminId);
-    expect(result.cleared).toBe(0);
-
-    const after = await models.StudentVentureActivity.findById(firstActivityRecordId).lean().exec();
+    const after = await record(firstActivityRecordId);
     expect(after!.status).toBe('COMPLETED');
     expect(after!.presentationReceivedAt).not.toBeNull();
   });
 
   it('refuses a record that is not on the activity', async () => {
-    const activityId = await activityOf(secondActivityRecordId);
     await expect(
-      setPresentationsReceived(activityId, [firstActivityRecordId], adminId),
+      createPresentation(
+        {
+          ventureActivityId: await activityOf(secondActivityRecordId),
+          presentedOn: new Date('2026-09-10T00:00:00.000Z'),
+          startTime: null,
+          driveUrl: null,
+          status: 'SCHEDULED',
+          studentRecordIds: [firstActivityRecordId],
+        },
+        adminId,
+      ),
     ).rejects.toThrow(/not on this venture activity/i);
   });
 });

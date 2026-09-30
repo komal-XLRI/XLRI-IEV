@@ -7,7 +7,7 @@ import {
   getVentureActivity,
   listSupportActivities,
 } from '@/services/ventures/ventureActivityService';
-import { listPresentationsForActivity } from '@/services/ventures/presentationService';
+import { listStagePresentations, listStageStudents } from '@/services/ventures/presentationService';
 import { listBehaviourForActivity } from '@/services/ventures/behaviourService';
 import { BehaviourPanel } from '@/components/admin/BehaviourPanel';
 import { getStageFeedback } from '@/services/ventures/mentorFeedbackService';
@@ -22,6 +22,7 @@ import { EditVentureActivity } from '@/components/admin/EditVentureActivity';
 import { PresentationsPanel } from '@/components/admin/PresentationsPanel';
 import { serialize } from '@/lib/utils/serialize';
 import { isValidObjectId } from '@/lib/utils/ids';
+import { formatDate } from '@/lib/utils/dates';
 
 export const metadata: Metadata = { title: 'Edit venture activity' };
 export const dynamic = 'force-dynamic';
@@ -34,19 +35,31 @@ export default async function EditVentureActivityPage({
   const { id } = await params;
   if (!isValidObjectId(id)) notFound();
 
-  const [activity, terms, allSupports, mappedSupports, presentations, behaviour, feedback] =
-    await Promise.all([
-      getVentureActivity(id),
-      listTerms(),
-      listSupportActivities(),
-      getSupportActivitiesForVentureActivity(id),
-      listPresentationsForActivity(id),
-      listBehaviourForActivity(id),
-      getStageFeedback(id),
-    ]);
+  const [
+    activity,
+    terms,
+    allSupports,
+    mappedSupports,
+    students,
+    presentations,
+    behaviour,
+    feedback,
+  ] = await Promise.all([
+    getVentureActivity(id),
+    listTerms(),
+    listSupportActivities(),
+    getSupportActivitiesForVentureActivity(id),
+    listStageStudents(id),
+    listStagePresentations(id),
+    listBehaviourForActivity(id),
+    getStageFeedback(id),
+  ]);
 
-  const withFeedback = presentations.filter(
-    (row) => (feedback.byRecord[row.recordId]?.entries.length ?? 0) > 0,
+  // Feedback belongs to one student in one presentation, so it is listed that way.
+  const withFeedback = presentations.flatMap((presentation) =>
+    presentation.participants
+      .filter((p) => (feedback.byParticipant[p.participantId]?.entries.length ?? 0) > 0)
+      .map((p) => ({ presentation, participant: p })),
   );
 
   return (
@@ -73,13 +86,13 @@ export default async function EditVentureActivityPage({
 
       <PresentationsPanel
         ventureActivityId={id}
-        folderUrl={activity.presentationFolderUrl ?? null}
-        rows={presentations}
+        students={students}
+        presentations={presentations}
         feedback={{
           formConfigured: feedback.formConfigured,
-          byRecord: Object.fromEntries(
-            Object.entries(feedback.byRecord).map(([recordId, summary]) => [
-              recordId,
+          byParticipant: Object.fromEntries(
+            Object.entries(feedback.byParticipant).map(([participantId, summary]) => [
+              participantId,
               { counted: summary.counted, required: summary.required, complete: summary.complete },
             ]),
           ),
@@ -101,20 +114,20 @@ export default async function EditVentureActivityPage({
         <Card className="mb-4">
           <CardHeader
             title="Mentor feedback received"
-            description="Responses from the stage's Google Form. A mentor's earlier response is kept but marked superseded when they submit again."
+            description="Responses from the stage's Google Form, by student and presentation date. A mentor's earlier response is kept but marked superseded when they submit again on the same presentation."
             icon={MessagesSquare}
           />
           <CardBody className="space-y-2">
-            {withFeedback.map((row) => {
-              const summary = feedback.byRecord[row.recordId]!;
+            {withFeedback.map(({ presentation, participant }) => {
+              const summary = feedback.byParticipant[participant.participantId]!;
               return (
-                <details key={row.recordId} className="rounded-control border">
+                <details key={participant.participantId} className="rounded-control border">
                   <summary className="hover:bg-surface-hover flex cursor-pointer flex-wrap items-center gap-2 px-3.5 py-2.5">
                     <span className="min-w-0 flex-1 text-[13.5px] font-medium">
-                      {row.studentName}
+                      {participant.studentName}
                       <span className="text-muted-foreground font-normal">
                         {' '}
-                        · {row.ventureName}
+                        · {participant.ventureName} · {formatDate(presentation.presentedOn)}
                       </span>
                     </span>
                     <span className="type-caption tabular-nums">

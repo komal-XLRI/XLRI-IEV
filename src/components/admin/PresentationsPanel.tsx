@@ -1,43 +1,74 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { CheckCircle2, ExternalLink, FolderOpen, Presentation, QrCode } from 'lucide-react';
-import { FeedbackQrModal } from './FeedbackQrModal';
-import { ActionForm } from '@/components/forms/ActionForm';
-import { Button, SubmitButton } from '@/components/ui/Button';
-import { Card, CardBody, CardFooter, CardHeader, EmptyState } from '@/components/ui/Card';
-import { Field, TextInput } from '@/components/ui/Field';
-import { ActivityStatusBadge, Badge } from '@/components/ui/Badge';
-import { MeterBar } from '@/components/ui/Chart';
+import { useOptimistic, useState, useTransition } from 'react';
 import {
-  setPresentationFolderAction,
-  setPresentationsReceivedAction,
+  CalendarDays,
+  CheckCircle2,
+  ExternalLink,
+  FolderOpen,
+  Pencil,
+  Plus,
+  Presentation,
+  QrCode,
+  Trash2,
+} from 'lucide-react';
+import { FeedbackQrModal } from './FeedbackQrModal';
+import {
+  PresentationFormModal,
+  type EditablePresentation,
+  type PresentationStudentOption,
+} from './PresentationFormModal';
+import { Button } from '@/components/ui/Button';
+import { Card, CardBody, CardHeader, EmptyState } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
+import { ConfirmDialog } from '@/components/ui/Modal';
+import { MeterBar } from '@/components/ui/Chart';
+import { useToast } from '@/components/ui/Toast';
+import {
+  deletePresentationAction,
+  setParticipantReceivedAction,
 } from '@/app/actions/adminVentures';
 import {
   PRESENTATION_STAGE_LABELS,
   presentationStageState,
   type PresentationStageState,
 } from '@/lib/rules/presentations';
+import { PRESENTATION_STATUS_LABELS, type PresentationStatus } from '@/lib/constants/presentations';
 import { formatDate } from '@/lib/utils/dates';
 import type { StudentActivityStatus } from '@/lib/constants/status';
 
-export interface PresentationChecklistRow {
+export interface StageStudentRow extends PresentationStudentOption {
+  status: StudentActivityStatus;
+  presented: boolean;
+}
+
+export interface PresentationParticipantRow {
+  participantId: string;
   recordId: string;
   studentName: string;
   studentEmail: string;
   ventureName: string;
-  status: StudentActivityStatus;
+  marked: boolean;
   receivedAt: string | null;
+  recordStatus: StudentActivityStatus;
 }
+
+export interface PresentationRow {
+  id: string;
+  presentedOn: string;
+  startTime: string | null;
+  driveUrl: string | null;
+  status: PresentationStatus;
+  migratedFromChecklist: boolean;
+  participants: PresentationParticipantRow[];
+}
+
+type FeedbackSummary = { counted: number; required: number; complete: boolean };
 
 export interface PresentationFeedbackSummary {
   formConfigured: boolean;
-  byRecord: Record<string, { counted: number; required: number; complete: boolean }>;
+  byParticipant: Record<string, FeedbackSummary>;
   tally: { received: number; complete: number; responses: number };
-}
-
-function isPresented(row: PresentationChecklistRow): boolean {
-  return row.receivedAt !== null || row.status === 'COMPLETED';
 }
 
 const STAGE_TONE: Record<PresentationStageState, 'muted' | 'info' | 'warning' | 'success'> = {
@@ -47,53 +78,77 @@ const STAGE_TONE: Record<PresentationStageState, 'muted' | 'info' | 'warning' | 
   COMPLETED: 'success',
 };
 
+const STATUS_TONE: Record<PresentationStatus, 'info' | 'success' | 'muted'> = {
+  SCHEDULED: 'info',
+  HELD: 'success',
+  CANCELLED: 'muted',
+};
+
+function ventureSummary(participants: PresentationParticipantRow[]): string {
+  const names = [...new Set(participants.map((p) => p.ventureName))];
+  if (names.length === 0) return 'No students';
+  if (names.length <= 2) return names.join(', ');
+  return `${names.length} ventures`;
+}
+
 /**
- * The presentation stage for one venture activity.
+ * The presentations of one stage.
  *
- * Students present; the programme office collects every deck into one shared
- * Drive folder and ticks each student off here. Nothing is uploaded to this
- * application — the folder is the record, the checklist is the register.
+ * A stage is presented in as many sittings as the programme office holds. Each
+ * is added here with its date, its students and its Drive link, and kept as
+ * history. Within a sitting every student is marked received on their own —
+ * only a received student has a mentor-feedback QR, and only received students
+ * are owed feedback.
  */
 export function PresentationsPanel({
   ventureActivityId,
-  folderUrl,
-  rows,
+  students,
+  presentations,
   feedback,
 }: {
   ventureActivityId: string;
-  folderUrl: string | null;
-  rows: PresentationChecklistRow[];
-  /** Mentor-feedback figures; absent when the page has none to give. */
-  feedback?: PresentationFeedbackSummary;
+  students: StageStudentRow[];
+  presentations: PresentationRow[];
+  feedback: PresentationFeedbackSummary;
 }) {
-  // A completed stage has, by definition, been presented — including one
-  // completed under the old review flow, which carries no received date.
-  const savedIds = useMemo(
-    () => new Set(rows.filter(isPresented).map((row) => row.recordId)),
-    [rows],
-  );
-  const completedIds = useMemo(
-    () => rows.filter((row) => row.status === 'COMPLETED').map((row) => row.recordId),
-    [rows],
-  );
-
-  const [checked, setChecked] = useState<Set<string>>(() => new Set(savedIds));
-  const [qrFor, setQrFor] = useState<PresentationChecklistRow | null>(null);
+  const { notify } = useToast();
+  const [formFor, setFormFor] = useState<EditablePresentation | 'new' | null>(null);
+  const [qrFor, setQrFor] = useState<{
+    participantId: string;
+    studentName: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState<PresentationRow | null>(null);
+  const [deletePending, startDelete] = useTransition();
 
   const stage = presentationStageState({
-    total: rows.length,
-    received: checked.size,
-    completed: completedIds.length,
+    total: students.length,
+    received: students.filter((s) => s.presented).length,
+    completed: students.filter((s) => s.status === 'COMPLETED').length,
   });
+  const presentedCount = students.filter((s) => s.presented).length;
 
-  const dirty = checked.size !== savedIds.size || [...checked].some((id) => !savedIds.has(id));
+  function openEdit(presentation: PresentationRow) {
+    setFormFor({
+      id: presentation.id,
+      presentedOn: presentation.presentedOn,
+      startTime: presentation.startTime,
+      driveUrl: presentation.driveUrl,
+      status: presentation.status,
+      recordIds: presentation.participants.map((p) => p.recordId),
+      lockedRecordIds: presentation.participants
+        .filter((p) => (feedback.byParticipant[p.participantId]?.counted ?? 0) > 0)
+        .map((p) => p.recordId),
+    });
+  }
 
-  function toggle(recordId: string, on: boolean) {
-    setChecked((current) => {
-      const next = new Set(current);
-      if (on) next.add(recordId);
-      else next.delete(recordId);
-      return next;
+  function confirmDelete() {
+    if (!deleting) return;
+    const target = deleting;
+    startDelete(async () => {
+      const result = await deletePresentationAction(target.id);
+      setDeleting(null);
+      if (result.ok) notify({ tone: 'success', title: 'Presentation deleted' });
+      else notify({ tone: 'error', title: 'Could not delete', description: result.message });
     });
   }
 
@@ -101,52 +156,26 @@ export function PresentationsPanel({
     <Card className="mb-4">
       <CardHeader
         title="Presentations"
-        description="Collect every student's presentation into one Drive folder, then tick each student off. The stage completes once feedback on the presentations is given."
+        description="Add each presentation with its date, students and Drive link, then mark every student received once they have presented. Only received students get a feedback QR; a student's stage completes once feedback on a received presentation is in."
         icon={Presentation}
-        action={<Badge tone={STAGE_TONE[stage]}>{PRESENTATION_STAGE_LABELS[stage]}</Badge>}
+        action={
+          <span className="flex flex-wrap items-center justify-end gap-2">
+            <Badge tone={STAGE_TONE[stage]}>{PRESENTATION_STAGE_LABELS[stage]}</Badge>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setFormFor('new')}
+              disabled={students.length === 0}
+            >
+              <Plus className="size-3.5" aria-hidden="true" />
+              Add presentation
+            </Button>
+          </span>
+        }
       />
 
       <CardBody className="space-y-5">
-        <ActionForm action={setPresentationFolderAction} successMessage="Folder link saved.">
-          {({ fieldErrors }) => (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <input type="hidden" name="ventureActivityId" value={ventureActivityId} />
-              <Field
-                label="Drive folder link"
-                htmlFor="presentationFolderUrl"
-                error={fieldErrors?.presentationFolderUrl}
-                hint="Shown to students on this activity. Leave blank and save to remove it."
-                className="min-w-0 flex-1"
-              >
-                <TextInput
-                  id="presentationFolderUrl"
-                  name="presentationFolderUrl"
-                  type="url"
-                  inputMode="url"
-                  placeholder="https://drive.google.com/drive/folders/…"
-                  defaultValue={folderUrl ?? ''}
-                />
-              </Field>
-              <div className="flex shrink-0 items-center gap-2 sm:mb-5">
-                <SubmitButton pendingLabel="Saving…">Save link</SubmitButton>
-                {folderUrl ? (
-                  <a
-                    href={folderUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary inline-flex items-center gap-1 text-[13px] font-medium hover:underline"
-                  >
-                    <FolderOpen className="size-3.5" aria-hidden="true" />
-                    Open folder
-                    <ExternalLink className="size-3" aria-hidden="true" />
-                  </a>
-                ) : null}
-              </div>
-            </div>
-          )}
-        </ActionForm>
-
-        {rows.length === 0 ? (
+        {students.length === 0 ? (
           <EmptyState
             size="sm"
             title="Nobody is on this activity yet"
@@ -155,20 +184,20 @@ export function PresentationsPanel({
         ) : (
           <div>
             <div className="mb-1 flex items-baseline justify-between">
-              <span className="type-overline">Presentations received</span>
+              <span className="type-overline">Students presented</span>
               <span className="type-caption tabular-nums">
-                {checked.size}/{rows.length}
+                {presentedCount}/{students.length}
               </span>
             </div>
             <MeterBar
-              value={checked.size}
-              max={rows.length}
+              value={presentedCount}
+              max={students.length}
               size="sm"
-              tone={checked.size === rows.length ? 'success' : 'primary'}
-              label="Presentations received"
+              tone={presentedCount === students.length ? 'success' : 'primary'}
+              label="Students presented"
             />
 
-            {feedback?.formConfigured ? (
+            {feedback.formConfigured ? (
               <>
                 <div className="mt-3 mb-1 flex items-baseline justify-between">
                   <span className="type-overline">Mentor feedback complete</span>
@@ -179,7 +208,7 @@ export function PresentationsPanel({
                       : ''}
                   </span>
                 </div>
-                {/* Out of received presentations only — a student who has not
+                {/* Out of received students only — a student who has not
                     presented is not owed feedback. */}
                 <MeterBar
                   value={feedback.tally.complete}
@@ -197,150 +226,281 @@ export function PresentationsPanel({
             ) : null}
           </div>
         )}
+
+        {students.length > 0 ? (
+          presentations.length === 0 ? (
+            <EmptyState
+              size="sm"
+              title="No presentations yet"
+              description="Use “Add presentation” to schedule the first one for this stage."
+            />
+          ) : (
+            <div>
+              <p className="type-overline mb-2">Presentation history</p>
+              <ul className="space-y-3">
+                {presentations.map((presentation) => (
+                  <PresentationCard
+                    key={presentation.id}
+                    presentation={presentation}
+                    feedback={feedback}
+                    onEdit={() => openEdit(presentation)}
+                    onDelete={() => setDeleting(presentation)}
+                    onQr={(participant) =>
+                      setQrFor({
+                        participantId: participant.participantId,
+                        studentName: participant.studentName,
+                      })
+                    }
+                  />
+                ))}
+              </ul>
+            </div>
+          )
+        ) : null}
       </CardBody>
 
-      {rows.length > 0 ? (
-        <ActionForm
-          action={setPresentationsReceivedAction}
-          successMessage="Presentation checklist saved."
-          className="border-t"
-        >
-          {() => (
-            <>
-              <input type="hidden" name="ventureActivityId" value={ventureActivityId} />
-
-              <ul className="divide-border divide-y">
-                {rows.map((row) => {
-                  // A completed stage cannot be un-presented from a checklist.
-                  const locked = row.status === 'COMPLETED';
-                  const isChecked = checked.has(row.recordId);
-
-                  return (
-                    <li key={row.recordId} className="flex flex-wrap items-center sm:flex-nowrap">
-                      <label className="hover:bg-surface-hover flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-5 py-2.5 transition-colors has-disabled:cursor-default">
-                        <input
-                          type="checkbox"
-                          name="receivedRecordIds"
-                          value={row.recordId}
-                          checked={isChecked}
-                          disabled={locked}
-                          onChange={(event) => toggle(row.recordId, event.target.checked)}
-                          className="border-input-border accent-primary size-4 shrink-0 rounded border"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13.5px] font-medium">
-                            {row.studentName}
-                          </span>
-                          <span className="type-caption block truncate">
-                            {row.ventureName}
-                            {row.studentEmail ? ` · ${row.studentEmail}` : ''}
-                          </span>
-                        </span>
-                        <span className="flex shrink-0 flex-col items-end gap-1">
-                          <ActivityStatusBadge state={row.status} />
-                          {row.receivedAt ? (
-                            <span className="type-caption">
-                              Received {formatDate(row.receivedAt)}
-                            </span>
-                          ) : null}
-                        </span>
-                      </label>
-
-                      {/* Outside the label, so pressing QR never toggles the
-                          checkbox. Keyed on the *saved* state: a tick that has
-                          not been saved yet is not a received presentation. */}
-                      <FeedbackCell
-                        saved={savedIds.has(row.recordId)}
-                        ticked={isChecked}
-                        summary={feedback?.byRecord[row.recordId]}
-                        formConfigured={feedback?.formConfigured ?? false}
-                        onQr={() => setQrFor(row)}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-
-              <CardFooter className="justify-between">
-                <span className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setChecked(new Set(rows.map((row) => row.recordId)))}
-                  >
-                    Tick all
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setChecked(new Set(completedIds))}
-                  >
-                    Clear
-                  </Button>
-                </span>
-                <span className="flex items-center gap-3">
-                  {dirty ? <span className="type-caption">Unsaved changes</span> : null}
-                  <SubmitButton pendingLabel="Saving…" disabled={!dirty}>
-                    Save checklist
-                  </SubmitButton>
-                </span>
-              </CardFooter>
-            </>
-          )}
-        </ActionForm>
-      ) : null}
+      <PresentationFormModal
+        key={formFor === null ? 'closed' : formFor === 'new' ? 'new' : formFor.id}
+        open={formFor !== null}
+        onClose={() => setFormFor(null)}
+        ventureActivityId={ventureActivityId}
+        students={students}
+        editing={formFor === null || formFor === 'new' ? null : formFor}
+      />
 
       <FeedbackQrModal
-        key={qrFor?.recordId ?? 'closed'}
-        recordId={qrFor?.recordId ?? null}
+        key={qrFor?.participantId ?? 'closed'}
+        participantId={qrFor?.participantId ?? null}
         studentName={qrFor?.studentName ?? ''}
         onClose={() => setQrFor(null)}
+      />
+
+      <ConfirmDialog
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+        busy={deletePending}
+        title="Delete this presentation?"
+        confirmLabel="Delete presentation"
+        message={
+          deleting ? (
+            <>
+              The presentation on{' '}
+              <span className="font-medium">{formatDate(deleting.presentedOn)}</span> and its{' '}
+              {deleting.participants.length} student(s) will be removed. A presentation that already
+              has mentor feedback cannot be deleted — set it to Cancelled instead.
+            </>
+          ) : null
+        }
       />
     </Card>
   );
 }
 
-function FeedbackCell({
-  saved,
-  ticked,
+function PresentationCard({
+  presentation,
+  feedback,
+  onEdit,
+  onDelete,
+  onQr,
+}: {
+  presentation: PresentationRow;
+  feedback: PresentationFeedbackSummary;
+  onEdit: () => void;
+  onDelete: () => void;
+  onQr: (participant: PresentationParticipantRow) => void;
+}) {
+  const cancelled = presentation.status === 'CANCELLED';
+  const received = cancelled ? [] : presentation.participants.filter((p) => p.marked);
+  const complete = received.filter((p) => feedback.byParticipant[p.participantId]?.complete);
+  const responses = received.reduce(
+    (sum, p) => sum + (feedback.byParticipant[p.participantId]?.counted ?? 0),
+    0,
+  );
+
+  return (
+    <li className="rounded-control border">
+      <div className="surface-sunken flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-3">
+        <CalendarDays className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-semibold">
+            {formatDate(presentation.presentedOn)}
+            {presentation.startTime ? (
+              <span className="text-muted-foreground font-normal"> · {presentation.startTime}</span>
+            ) : null}
+          </p>
+          <p className="type-caption truncate">
+            {presentation.participants.length} student
+            {presentation.participants.length === 1 ? '' : 's'} ·{' '}
+            {ventureSummary(presentation.participants)}
+            {presentation.migratedFromChecklist ? ' · from the earlier checklist' : ''}
+          </p>
+        </div>
+        <Badge tone={STATUS_TONE[presentation.status]}>
+          {PRESENTATION_STATUS_LABELS[presentation.status]}
+        </Badge>
+        {presentation.driveUrl ? (
+          <a
+            href={presentation.driveUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary inline-flex items-center gap-1 text-[13px] font-medium hover:underline"
+          >
+            <FolderOpen className="size-3.5" aria-hidden="true" />
+            Open Drive
+            <ExternalLink className="size-3" aria-hidden="true" />
+          </a>
+        ) : (
+          <span className="type-caption">No Drive link</span>
+        )}
+        <span className="flex gap-1">
+          <Button type="button" variant="ghost" size="sm" onClick={onEdit}>
+            <Pencil className="size-3.5" aria-hidden="true" />
+            Edit
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onDelete}
+            aria-label="Delete presentation"
+          >
+            <Trash2 className="size-3.5" aria-hidden="true" />
+          </Button>
+        </span>
+      </div>
+
+      <div className="type-caption flex flex-wrap gap-x-4 gap-y-1 border-b px-4 py-2 tabular-nums">
+        <span>
+          Received{' '}
+          <span className="text-foreground font-medium">
+            {received.length}/{presentation.participants.length}
+          </span>
+        </span>
+        {feedback.formConfigured ? (
+          <span>
+            Feedback complete{' '}
+            <span className="text-foreground font-medium">
+              {complete.length}/{received.length}
+            </span>
+            {responses > 0 ? ` · ${responses} response(s)` : ''}
+          </span>
+        ) : (
+          <span>No feedback form configured for this stage</span>
+        )}
+        {cancelled ? <span>Cancelled — feedback links are off</span> : null}
+      </div>
+
+      <ul className="divide-border divide-y">
+        {presentation.participants.map((participant) => (
+          <ParticipantRow
+            key={participant.participantId}
+            participant={participant}
+            cancelled={cancelled}
+            summary={feedback.byParticipant[participant.participantId]}
+            formConfigured={feedback.formConfigured}
+            onQr={() => onQr(participant)}
+          />
+        ))}
+      </ul>
+    </li>
+  );
+}
+
+/**
+ * One student in one presentation. The Received box saves as soon as it is
+ * changed — the server decides, and the QR follows the saved state only.
+ */
+function ParticipantRow({
+  participant,
+  cancelled,
   summary,
   formConfigured,
   onQr,
 }: {
-  saved: boolean;
-  ticked: boolean;
-  summary?: { counted: number; required: number; complete: boolean };
+  participant: PresentationParticipantRow;
+  cancelled: boolean;
+  summary?: FeedbackSummary;
   formConfigured: boolean;
   onQr: () => void;
 }) {
-  if (!saved) {
-    return (
-      <span className="type-caption w-full px-5 pb-2.5 sm:w-48 sm:shrink-0 sm:pb-0 sm:text-right">
-        {ticked ? 'Save to enable feedback' : 'Presentation pending'}
-      </span>
-    );
+  const { notify } = useToast();
+  const [pending, startTransition] = useTransition();
+  const [shown, setShown] = useOptimistic(participant.marked);
+
+  function toggle(next: boolean) {
+    startTransition(async () => {
+      setShown(next);
+      const result = await setParticipantReceivedAction(participant.participantId, next);
+      if (!result.ok) {
+        notify({ tone: 'error', title: 'Could not save', description: result.message });
+      } else if (result.data.stageCompleted) {
+        notify({
+          tone: 'success',
+          title: `${participant.studentName} completed this stage`,
+          description: 'Their feedback was already in, so the next stage is unlocked.',
+        });
+      }
+    });
   }
 
+  const received = participant.marked && !cancelled;
+
   return (
-    <span className="flex w-full items-center gap-2 px-5 pb-2.5 sm:w-48 sm:shrink-0 sm:justify-end sm:pb-0">
-      <Button type="button" variant="secondary" size="sm" onClick={onQr}>
-        <QrCode className="size-3.5" aria-hidden="true" />
-        QR
-      </Button>
-      <span className="flex flex-col items-end">
-        <span className="text-[12.5px] font-medium tabular-nums">
-          Feedback {summary?.counted ?? 0}
-          {formConfigured ? `/${summary?.required ?? 1}` : ''}
-        </span>
-        {summary?.complete ? (
-          <span className="text-success-soft-foreground inline-flex items-center gap-0.5 text-[11.5px] font-semibold">
-            <CheckCircle2 className="size-3" aria-hidden="true" />
-            Complete
+    <li className="flex flex-wrap items-center sm:flex-nowrap">
+      <label className="hover:bg-surface-hover flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors has-disabled:cursor-default">
+        <input
+          type="checkbox"
+          checked={shown}
+          disabled={pending || cancelled}
+          onChange={(event) => toggle(event.target.checked)}
+          aria-label={`${participant.studentName} presentation received`}
+          className="border-input-border accent-primary size-4 shrink-0 rounded border"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] font-medium">
+            {participant.studentName}
           </span>
-        ) : null}
+          <span className="type-caption block truncate">
+            {participant.ventureName}
+            {participant.studentEmail ? ` · ${participant.studentEmail}` : ''}
+          </span>
+        </span>
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          <Badge tone={shown && !cancelled ? 'success' : 'muted'}>
+            {shown && !cancelled ? 'Received' : 'Not received'}
+          </Badge>
+          {participant.receivedAt && !pending ? (
+            <span className="type-caption">{formatDate(participant.receivedAt)}</span>
+          ) : null}
+        </span>
+      </label>
+
+      {/* Outside the label, so pressing QR never toggles the checkbox. */}
+      <span className="flex w-full items-center gap-2 px-4 pb-2.5 sm:w-52 sm:shrink-0 sm:justify-end sm:pb-0">
+        {received && !pending ? (
+          <Button type="button" variant="secondary" size="sm" onClick={onQr}>
+            <QrCode className="size-3.5" aria-hidden="true" />
+            QR
+          </Button>
+        ) : (
+          <span className="type-caption">{pending ? 'Saving…' : 'QR unavailable'}</span>
+        )}
+        <span className="flex flex-col items-end">
+          <span className="text-[12.5px] font-medium tabular-nums">
+            Feedback {summary?.counted ?? 0}
+            {formConfigured ? `/${summary?.required ?? 1}` : ''}
+          </span>
+          {summary?.complete ? (
+            <span className="text-success-soft-foreground inline-flex items-center gap-0.5 text-[11.5px] font-semibold">
+              <CheckCircle2 className="size-3" aria-hidden="true" />
+              Complete
+            </span>
+          ) : participant.recordStatus === 'COMPLETED' ? (
+            <span className="type-caption">Stage completed</span>
+          ) : null}
+        </span>
       </span>
-    </span>
+    </li>
   );
 }

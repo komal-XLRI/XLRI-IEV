@@ -1,4 +1,5 @@
 import type { StudentActivityStatus } from '@/lib/constants/status';
+import type { PresentationStatus } from '@/lib/constants/presentations';
 
 /**
  * Mentor feedback on presentations.
@@ -15,6 +16,20 @@ export function isPresentationReceived(record: {
   status: StudentActivityStatus;
 }): boolean {
   return record.presentationReceivedAt != null || record.status === 'COMPLETED';
+}
+
+/**
+ * Whether one student's presentation in one sitting was received — the only
+ * thing a feedback QR, its link and an incoming response are checked against.
+ * A cancelled sitting has no received students, whatever their marks say, so
+ * cancelling one switches every link in it off and restoring it switches them
+ * back on.
+ */
+export function isParticipantReceived(
+  participant: { receivedAt?: Date | string | null },
+  presentation: { status: PresentationStatus },
+): boolean {
+  return participant.receivedAt != null && presentation.status !== 'CANCELLED';
 }
 
 export const DEFAULT_REQUIRED_FEEDBACK_COUNT = 1;
@@ -40,7 +55,7 @@ export function mentorKey(response: { mentorEmail?: string | null; googleRespons
 }
 
 /**
- * Among one mentor's responses on one presentation, only the latest counts;
+ * Among one mentor's responses on one participant, only the latest counts;
  * the rest are superseded. Returns the ids to mark superseded.
  */
 export function supersededResponseIds<

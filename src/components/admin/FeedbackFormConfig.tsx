@@ -75,10 +75,11 @@ export function FeedbackFormConfig({
                   <li>
                     Answer that question with{' '}
                     <span className="font-mono">{FEEDBACK_PLACEHOLDERS.token}</span>. Optionally
-                    answer the student, venture and stage questions with{' '}
+                    answer the student, venture, stage and date questions with{' '}
                     <span className="font-mono">{FEEDBACK_PLACEHOLDERS.student}</span>,{' '}
-                    <span className="font-mono">{FEEDBACK_PLACEHOLDERS.venture}</span> and{' '}
-                    <span className="font-mono">{FEEDBACK_PLACEHOLDERS.stage}</span>.
+                    <span className="font-mono">{FEEDBACK_PLACEHOLDERS.venture}</span>,{' '}
+                    <span className="font-mono">{FEEDBACK_PLACEHOLDERS.stage}</span> and{' '}
+                    <span className="font-mono">{FEEDBACK_PLACEHOLDERS.date}</span>.
                   </li>
                   <li>
                     Click <em>Get link</em> → <em>Copy link</em>, and paste it above.

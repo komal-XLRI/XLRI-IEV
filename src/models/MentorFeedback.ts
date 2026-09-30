@@ -15,12 +15,16 @@ export interface IMentorFeedbackAnswer {
  *
  * The questions differ from stage to stage, so nothing here is question-
  * specific: `responses` keeps every item in form order, as Google sent it.
- * The presentation is the StudentVentureActivity record the QR token belongs
- * to; the other ids are denormalised from it for reading by stage or student.
+ * It belongs to the participant — one student in one presentation — whose QR
+ * token the response carried; the other ids are denormalised from it for
+ * reading by presentation, stage or student.
  */
 export interface IMentorFeedback {
   _id: Types.ObjectId;
 
+  presentationId?: Types.ObjectId | null;
+  /** Null only on feedback stored before presentations became separate records. */
+  participantId?: Types.ObjectId | null;
   studentVentureActivityId: Types.ObjectId;
   studentVentureId: Types.ObjectId;
   studentId: Types.ObjectId;
@@ -39,7 +43,7 @@ export interface IMentorFeedback {
 
   responses: IMentorFeedbackAnswer[];
 
-  /** A later response from the same mentor on the same presentation replaced this one. */
+  /** A later response from the same mentor on the same participant replaced this one. */
   superseded: boolean;
 
   createdAt: Date;
@@ -57,6 +61,12 @@ const answerSchema = new Schema<IMentorFeedbackAnswer>(
 
 const mentorFeedbackSchema = new Schema<IMentorFeedback>(
   {
+    presentationId: { type: Schema.Types.ObjectId, ref: 'Presentation', default: null },
+    participantId: {
+      type: Schema.Types.ObjectId,
+      ref: 'PresentationParticipant',
+      default: null,
+    },
     studentVentureActivityId: {
       type: Schema.Types.ObjectId,
       ref: 'StudentVentureActivity',
@@ -84,6 +94,8 @@ const mentorFeedbackSchema = new Schema<IMentorFeedback>(
 );
 
 mentorFeedbackSchema.index({ googleResponseId: 1 }, { unique: true });
+mentorFeedbackSchema.index({ participantId: 1, submittedAt: -1 });
+mentorFeedbackSchema.index({ presentationId: 1 });
 mentorFeedbackSchema.index({ studentVentureActivityId: 1, submittedAt: -1 });
 mentorFeedbackSchema.index({ studentVentureActivityId: 1, mentorEmail: 1 });
 mentorFeedbackSchema.index({ ventureActivityId: 1, superseded: 1 });

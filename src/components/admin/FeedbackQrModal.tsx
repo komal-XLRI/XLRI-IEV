@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/Badge';
 import { FormMessage } from '@/components/ui/FormMessage';
 import { useToast } from '@/components/ui/Toast';
 import { getFeedbackQrAction, regenerateFeedbackTokenAction } from '@/app/actions/adminVentures';
-import type { FeedbackQrResult } from '@/services/ventures/mentorFeedbackService';
+import type { FeedbackQrResult, QrDetails } from '@/services/ventures/mentorFeedbackService';
+import { formatDate } from '@/lib/utils/dates';
 
 function safeFileName(value: string): string {
   return (
@@ -19,6 +20,10 @@ function safeFileName(value: string): string {
   );
 }
 
+function presentationWhen(details: QrDetails): string {
+  return `${formatDate(details.presentedOn)}${details.startTime ? ` · ${details.startTime}` : ''}`;
+}
+
 function escapeHtml(value: string): string {
   return value.replace(
     /[&<>"']/g,
@@ -27,18 +32,18 @@ function escapeHtml(value: string): string {
 }
 
 /**
- * One presentation's mentor-feedback QR. Admin only.
+ * One student's mentor-feedback QR for one presentation. Admin only.
  *
  * The QR is fetched when the dialog opens rather than rendered for every row:
  * tokens are issued lazily, and the server decides — from the presentation as
  * it is now — whether a QR may exist at all.
  */
 export function FeedbackQrModal({
-  recordId,
+  participantId,
   studentName,
   onClose,
 }: {
-  recordId: string | null;
+  participantId: string | null;
   studentName: string;
   onClose: () => void;
 }) {
@@ -49,16 +54,16 @@ export function FeedbackQrModal({
   const [pending, startTransition] = useTransition();
   const { notify } = useToast();
 
-  // The parent remounts this dialog (via `key`) for each presentation, so every
+  // The parent remounts this dialog (via `key`) for each student, so every
   // open starts from empty state and only the fetch itself happens here.
   useEffect(() => {
-    if (!recordId) return;
+    if (!participantId) return;
     startTransition(async () => {
-      const response = await getFeedbackQrAction(recordId);
+      const response = await getFeedbackQrAction(participantId);
       if (response.ok) setResult(response.data);
       else setError(response.message);
     });
-  }, [recordId]);
+  }, [participantId]);
 
   function copyLink(url: string) {
     navigator.clipboard.writeText(url).then(
@@ -98,6 +103,7 @@ export function FeedbackQrModal({
       <h1>${escapeHtml(d.studentName)}</h1>
       <p>${escapeHtml(d.ventureName)}</p>
       <p>${escapeHtml(d.stage)}</p>
+      <p>Presentation: ${escapeHtml(presentationWhen(d))}</p>
       <div class="qr">${data.svg}</div>
       <p><strong>Scan to give mentor feedback</strong></p>
       <p class="small">${escapeHtml(data.url)}</p>
@@ -108,9 +114,9 @@ export function FeedbackQrModal({
   }
 
   function regenerate() {
-    if (!recordId) return;
+    if (!participantId) return;
     startTransition(async () => {
-      const response = await regenerateFeedbackTokenAction(recordId);
+      const response = await regenerateFeedbackTokenAction(participantId);
       setConfirmRegenerate(false);
       if (response.ok) {
         setResult(response.data);
@@ -133,7 +139,7 @@ export function FeedbackQrModal({
 
   return (
     <Modal
-      open={recordId !== null}
+      open={participantId !== null}
       onClose={onClose}
       title={`Feedback QR — ${studentName}`}
       size="md"
@@ -152,15 +158,23 @@ export function FeedbackQrModal({
               <dt className="type-overline">Venture</dt>
               <dd className="font-medium">{details.ventureName}</dd>
             </div>
-            <div className="col-span-2">
+            <div>
               <dt className="type-overline">Stage</dt>
               <dd className="font-medium">{details.stage}</dd>
             </div>
             <div>
               <dt className="type-overline">Presentation</dt>
+              <dd className="font-medium">{presentationWhen(details)}</dd>
+            </div>
+            <div>
+              <dt className="type-overline">Student&apos;s presentation</dt>
               <dd>
                 <Badge tone={details.presentationReceived ? 'success' : 'warning'}>
-                  {details.presentationReceived ? 'Received' : 'Pending'}
+                  {details.presentationStatus === 'CANCELLED'
+                    ? 'Cancelled'
+                    : details.presentationReceived
+                      ? 'Received'
+                      : 'Not received'}
                 </Badge>
               </dd>
             </div>
