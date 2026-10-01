@@ -12,17 +12,12 @@ import { listBehaviourForActivity } from '@/services/ventures/behaviourService';
 import { BehaviourPanel } from '@/components/admin/BehaviourPanel';
 import { getStageFeedback } from '@/services/ventures/mentorFeedbackService';
 import { FeedbackFormConfig } from '@/components/admin/FeedbackFormConfig';
-import { MentorFeedbackEntries } from '@/components/venture/MentorFeedbackEntries';
 import { AutoRefresh } from '@/components/layout/AutoRefresh';
-import { Card, CardBody, CardHeader } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { MessagesSquare } from 'lucide-react';
 import { listTerms } from '@/services/academic/academicService';
 import { EditVentureActivity } from '@/components/admin/EditVentureActivity';
 import { PresentationsPanel } from '@/components/admin/PresentationsPanel';
 import { serialize } from '@/lib/utils/serialize';
 import { isValidObjectId } from '@/lib/utils/ids';
-import { formatDate } from '@/lib/utils/dates';
 
 export const metadata: Metadata = { title: 'Edit venture activity' };
 export const dynamic = 'force-dynamic';
@@ -55,13 +50,6 @@ export default async function EditVentureActivityPage({
     getStageFeedback(id),
   ]);
 
-  // Feedback belongs to one student in one presentation, so it is listed that way.
-  const withFeedback = presentations.flatMap((presentation) =>
-    presentation.participants
-      .filter((p) => (feedback.byParticipant[p.participantId]?.entries.length ?? 0) > 0)
-      .map((p) => ({ presentation, participant: p })),
-  );
-
   return (
     <>
       <PageHeader
@@ -90,12 +78,8 @@ export default async function EditVentureActivityPage({
         presentations={presentations}
         feedback={{
           formConfigured: feedback.formConfigured,
-          byParticipant: Object.fromEntries(
-            Object.entries(feedback.byParticipant).map(([participantId, summary]) => [
-              participantId,
-              { counted: summary.counted, required: summary.required, complete: summary.complete },
-            ]),
-          ),
+          // Each presentation shows its own mentor feedback, responses included.
+          byParticipant: feedback.byParticipant,
           tally: feedback.tally,
         }}
       />
@@ -109,41 +93,6 @@ export default async function EditVentureActivityPage({
         enabled={feedback.formEnabled}
         requiredFeedbackCount={feedback.requiredFeedbackCount}
       />
-
-      {withFeedback.length > 0 ? (
-        <Card className="mb-4">
-          <CardHeader
-            title="Mentor feedback received"
-            description="Responses from the stage's Google Form, by student and presentation date. A mentor's earlier response is kept but marked superseded when they submit again on the same presentation."
-            icon={MessagesSquare}
-          />
-          <CardBody className="space-y-2">
-            {withFeedback.map(({ presentation, participant }) => {
-              const summary = feedback.byParticipant[participant.participantId]!;
-              return (
-                <details key={participant.participantId} className="rounded-control border">
-                  <summary className="hover:bg-surface-hover flex cursor-pointer flex-wrap items-center gap-2 px-3.5 py-2.5">
-                    <span className="min-w-0 flex-1 text-[13.5px] font-medium">
-                      {participant.studentName}
-                      <span className="text-muted-foreground font-normal">
-                        {' '}
-                        · {participant.ventureName} · {formatDate(presentation.presentedOn)}
-                      </span>
-                    </span>
-                    <span className="type-caption tabular-nums">
-                      {summary.counted}/{summary.required} counted
-                    </span>
-                    {summary.complete ? <Badge tone="success">Complete</Badge> : null}
-                  </summary>
-                  <div className="border-t p-3">
-                    <MentorFeedbackEntries entries={summary.entries} showSuperseded />
-                  </div>
-                </details>
-              );
-            })}
-          </CardBody>
-        </Card>
-      ) : null}
 
       <BehaviourPanel rows={behaviour} />
 

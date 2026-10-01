@@ -1,11 +1,10 @@
 'use client';
 
-import { useOptimistic, useState, useTransition } from 'react';
+import { useOptimistic, useState, useTransition, type ReactNode } from 'react';
 import {
-  CalendarDays,
-  CheckCircle2,
+  ChevronDown,
   ExternalLink,
-  FolderOpen,
+  MessagesSquare,
   Pencil,
   Plus,
   Presentation,
@@ -18,6 +17,7 @@ import {
   type EditablePresentation,
   type PresentationStudentOption,
 } from './PresentationFormModal';
+import { MentorFeedbackEntries } from '@/components/venture/MentorFeedbackEntries';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader, EmptyState } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -35,7 +35,9 @@ import {
 } from '@/lib/rules/presentations';
 import { PRESENTATION_STATUS_LABELS, type PresentationStatus } from '@/lib/constants/presentations';
 import { formatDate } from '@/lib/utils/dates';
+import { cn } from '@/lib/utils/cn';
 import type { StudentActivityStatus } from '@/lib/constants/status';
+import type { MentorFeedbackEntry } from '@/services/ventures/mentorFeedbackService';
 
 export interface StageStudentRow extends PresentationStudentOption {
   status: StudentActivityStatus;
@@ -63,11 +65,17 @@ export interface PresentationRow {
   participants: PresentationParticipantRow[];
 }
 
-type FeedbackSummary = { counted: number; required: number; complete: boolean };
+type ParticipantFeedback = {
+  counted: number;
+  required: number;
+  complete: boolean;
+  /** Every response, newest first — superseded ones included, flagged. */
+  entries: MentorFeedbackEntry[];
+};
 
 export interface PresentationFeedbackSummary {
   formConfigured: boolean;
-  byParticipant: Record<string, FeedbackSummary>;
+  byParticipant: Record<string, ParticipantFeedback>;
   tally: { received: number; complete: number; responses: number };
 }
 
@@ -84,11 +92,16 @@ const STATUS_TONE: Record<PresentationStatus, 'info' | 'success' | 'muted'> = {
   CANCELLED: 'muted',
 };
 
-function ventureSummary(participants: PresentationParticipantRow[]): string {
-  const names = [...new Set(participants.map((p) => p.ventureName))];
-  if (names.length === 0) return 'No students';
-  if (names.length <= 2) return names.join(', ');
-  return `${names.length} ventures`;
+/** "01 October 2026" — the card header has room for the full month. */
+const LONG_DATE = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+function plural(count: number, one: string, many = `${one}s`) {
+  return `${count} ${count === 1 ? one : many}`;
 }
 
 /**
@@ -98,7 +111,7 @@ function ventureSummary(participants: PresentationParticipantRow[]): string {
  * is added here with its date, its students and its Drive link, and kept as
  * history. Within a sitting every student is marked received on their own —
  * only a received student has a mentor-feedback QR, and only received students
- * are owed feedback.
+ * are owed feedback. Each presentation shows its own mentor feedback.
  */
 export function PresentationsPanel({
   ventureActivityId,
@@ -136,7 +149,7 @@ export function PresentationsPanel({
       status: presentation.status,
       recordIds: presentation.participants.map((p) => p.recordId),
       lockedRecordIds: presentation.participants
-        .filter((p) => (feedback.byParticipant[p.participantId]?.counted ?? 0) > 0)
+        .filter((p) => (feedback.byParticipant[p.participantId]?.entries.length ?? 0) > 0)
         .map((p) => p.recordId),
     });
   }
@@ -156,7 +169,7 @@ export function PresentationsPanel({
     <Card className="mb-4">
       <CardHeader
         title="Presentations"
-        description="Add each presentation with its date, students and Drive link, then mark every student received once they have presented. Only received students get a feedback QR; a student's stage completes once feedback on a received presentation is in."
+        description="Add each presentation with its date, students and Drive link, then mark every student received once they have presented. Only received students get a feedback QR."
         icon={Presentation}
         action={
           <span className="flex flex-wrap items-center justify-end gap-2">
@@ -182,30 +195,29 @@ export function PresentationsPanel({
             description="Students appear here once their venture has been created."
           />
         ) : (
-          <div>
-            <div className="mb-1 flex items-baseline justify-between">
-              <span className="type-overline">Students presented</span>
-              <span className="type-caption tabular-nums">
-                {presentedCount}/{students.length}
-              </span>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <div className="mb-1 flex items-baseline justify-between">
+                <span className="type-overline">Students presented</span>
+                <span className="type-caption tabular-nums">
+                  {presentedCount}/{students.length}
+                </span>
+              </div>
+              <MeterBar
+                value={presentedCount}
+                max={students.length}
+                size="sm"
+                tone={presentedCount === students.length ? 'success' : 'primary'}
+                label="Students presented"
+              />
             </div>
-            <MeterBar
-              value={presentedCount}
-              max={students.length}
-              size="sm"
-              tone={presentedCount === students.length ? 'success' : 'primary'}
-              label="Students presented"
-            />
 
             {feedback.formConfigured ? (
-              <>
-                <div className="mt-3 mb-1 flex items-baseline justify-between">
+              <div>
+                <div className="mb-1 flex items-baseline justify-between">
                   <span className="type-overline">Mentor feedback complete</span>
                   <span className="type-caption tabular-nums">
                     {feedback.tally.complete}/{feedback.tally.received}
-                    {feedback.tally.responses > 0
-                      ? ` · ${feedback.tally.responses} response(s)`
-                      : ''}
                   </span>
                 </div>
                 {/* Out of received students only — a student who has not
@@ -222,7 +234,7 @@ export function PresentationsPanel({
                   }
                   label="Mentor feedback complete"
                 />
-              </>
+              </div>
             ) : null}
           </div>
         )}
@@ -235,26 +247,26 @@ export function PresentationsPanel({
               description="Use “Add presentation” to schedule the first one for this stage."
             />
           ) : (
-            <div>
-              <p className="type-overline mb-2">Presentation history</p>
-              <ul className="space-y-3">
-                {presentations.map((presentation) => (
-                  <PresentationCard
-                    key={presentation.id}
-                    presentation={presentation}
-                    feedback={feedback}
-                    onEdit={() => openEdit(presentation)}
-                    onDelete={() => setDeleting(presentation)}
-                    onQr={(participant) =>
-                      setQrFor({
-                        participantId: participant.participantId,
-                        studentName: participant.studentName,
-                      })
-                    }
-                  />
-                ))}
-              </ul>
-            </div>
+            <ul className="space-y-3">
+              {presentations.map((presentation, index) => (
+                <PresentationCard
+                  key={presentation.id}
+                  number={index + 1}
+                  // The latest presentation is the one being worked on.
+                  defaultOpen={index === presentations.length - 1}
+                  presentation={presentation}
+                  feedback={feedback}
+                  onEdit={() => openEdit(presentation)}
+                  onDelete={() => setDeleting(presentation)}
+                  onQr={(participant) =>
+                    setQrFor({
+                      participantId: participant.participantId,
+                      studentName: participant.studentName,
+                    })
+                  }
+                />
+              ))}
+            </ul>
           )
         ) : null}
       </CardBody>
@@ -297,119 +309,179 @@ export function PresentationsPanel({
   );
 }
 
+/** Smooth open/close without measuring heights: a 0fr → 1fr grid row. */
+function Collapsible({ open, children }: { open: boolean; children: ReactNode }) {
+  return (
+    <div
+      className={cn(
+        'grid transition-[grid-template-rows] duration-200 ease-out',
+        open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+      )}
+    >
+      <div className="min-h-0 overflow-hidden" inert={!open}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function PresentationCard({
+  number,
+  defaultOpen,
   presentation,
   feedback,
   onEdit,
   onDelete,
   onQr,
 }: {
+  number: number;
+  defaultOpen: boolean;
   presentation: PresentationRow;
   feedback: PresentationFeedbackSummary;
   onEdit: () => void;
   onDelete: () => void;
   onQr: (participant: PresentationParticipantRow) => void;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   const cancelled = presentation.status === 'CANCELLED';
-  const received = cancelled ? [] : presentation.participants.filter((p) => p.marked);
-  const complete = received.filter((p) => feedback.byParticipant[p.participantId]?.complete);
-  const responses = received.reduce(
+  const total = presentation.participants.length;
+  const received = cancelled ? 0 : presentation.participants.filter((p) => p.marked).length;
+  const responses = presentation.participants.reduce(
     (sum, p) => sum + (feedback.byParticipant[p.participantId]?.counted ?? 0),
     0,
   );
+  const label = `Presentation ${String(number).padStart(2, '0')}`;
 
   return (
-    <li className="rounded-control border">
-      <div className="surface-sunken flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-3">
-        <CalendarDays className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-semibold">
-            {formatDate(presentation.presentedOn)}
-            {presentation.startTime ? (
-              <span className="text-muted-foreground font-normal"> · {presentation.startTime}</span>
-            ) : null}
-          </p>
-          <p className="type-caption truncate">
-            {presentation.participants.length} student
-            {presentation.participants.length === 1 ? '' : 's'} ·{' '}
-            {ventureSummary(presentation.participants)}
-            {presentation.migratedFromChecklist ? ' · from the earlier checklist' : ''}
-          </p>
-        </div>
+    <li className="rounded-control bg-surface overflow-hidden border">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="hover:bg-surface-hover flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-left transition-colors"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-[14px] font-semibold">{label}</span>
+            <span className="text-muted-foreground text-[13px]">
+              {LONG_DATE.format(new Date(presentation.presentedOn))}
+              {presentation.startTime ? ` · ${presentation.startTime}` : ''}
+            </span>
+          </span>
+          <span className="mt-1.5 flex flex-wrap gap-1.5">
+            <Badge tone="neutral">{plural(total, 'Student')}</Badge>
+            <Badge tone={received > 0 ? 'success' : 'muted'}>{received} Received</Badge>
+            {total - received > 0 ? <Badge tone="muted">{total - received} Pending</Badge> : null}
+            <Badge tone={responses > 0 ? 'info' : 'muted'}>{plural(responses, 'Feedback')}</Badge>
+          </span>
+        </span>
         <Badge tone={STATUS_TONE[presentation.status]}>
           {PRESENTATION_STATUS_LABELS[presentation.status]}
         </Badge>
-        {presentation.driveUrl ? (
-          <a
-            href={presentation.driveUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary inline-flex items-center gap-1 text-[13px] font-medium hover:underline"
-          >
-            <FolderOpen className="size-3.5" aria-hidden="true" />
-            Open Drive
-            <ExternalLink className="size-3" aria-hidden="true" />
-          </a>
-        ) : (
-          <span className="type-caption">No Drive link</span>
-        )}
-        <span className="flex gap-1">
-          <Button type="button" variant="ghost" size="sm" onClick={onEdit}>
-            <Pencil className="size-3.5" aria-hidden="true" />
-            Edit
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onDelete}
-            aria-label="Delete presentation"
-          >
-            <Trash2 className="size-3.5" aria-hidden="true" />
-          </Button>
-        </span>
-      </div>
+        <ChevronDown
+          className={cn(
+            'text-muted-foreground size-4 shrink-0 transition-transform duration-200',
+            open && 'rotate-180',
+          )}
+          aria-hidden="true"
+        />
+      </button>
 
-      <div className="type-caption flex flex-wrap gap-x-4 gap-y-1 border-b px-4 py-2 tabular-nums">
-        <span>
-          Received{' '}
-          <span className="text-foreground font-medium">
-            {received.length}/{presentation.participants.length}
-          </span>
-        </span>
-        {feedback.formConfigured ? (
-          <span>
-            Feedback complete{' '}
-            <span className="text-foreground font-medium">
-              {complete.length}/{received.length}
+      <Collapsible open={open}>
+        <div className="border-t">
+          {/* Details: one row, not a list. */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+            <Detail label="Date">
+              {formatDate(presentation.presentedOn)}
+              {presentation.startTime ? `, ${presentation.startTime}` : ''}
+            </Detail>
+            <Detail label="Students">{plural(total, 'student')}</Detail>
+            {presentation.migratedFromChecklist ? (
+              <Detail label="Source">Earlier checklist</Detail>
+            ) : null}
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              {presentation.driveUrl ? (
+                <a
+                  href={presentation.driveUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="border-border hover:bg-surface-hover inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors"
+                >
+                  Open Drive
+                  <ExternalLink className="size-3.5" aria-hidden="true" />
+                </a>
+              ) : (
+                <span className="type-caption">No Drive link yet</span>
+              )}
+              <Button type="button" variant="ghost" size="sm" onClick={onEdit}>
+                <Pencil className="size-3.5" aria-hidden="true" />
+                Edit
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onDelete}
+                aria-label="Delete presentation"
+              >
+                <Trash2 className="size-3.5" aria-hidden="true" />
+              </Button>
             </span>
-            {responses > 0 ? ` · ${responses} response(s)` : ''}
-          </span>
-        ) : (
-          <span>No feedback form configured for this stage</span>
-        )}
-        {cancelled ? <span>Cancelled — feedback links are off</span> : null}
-      </div>
+          </div>
 
-      <ul className="divide-border divide-y">
-        {presentation.participants.map((participant) => (
-          <ParticipantRow
-            key={participant.participantId}
-            participant={participant}
-            cancelled={cancelled}
-            summary={feedback.byParticipant[participant.participantId]}
-            formConfigured={feedback.formConfigured}
-            onQr={() => onQr(participant)}
+          {cancelled ? (
+            <p className="type-caption border-t px-4 py-2">
+              This presentation is cancelled, so its feedback QRs are switched off.
+            </p>
+          ) : null}
+
+          {/* Students */}
+          <div className="border-t">
+            <div className="type-overline hidden grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_8.5rem_8rem_5.5rem] items-center gap-3 px-4 py-2 md:grid">
+              <span>Student</span>
+              <span>Venture</span>
+              <span>Status</span>
+              <span>QR</span>
+              <span className="text-right">Feedback</span>
+            </div>
+            <ul className="divide-border divide-y md:border-t">
+              {presentation.participants.map((participant) => (
+                <ParticipantRow
+                  key={participant.participantId}
+                  participant={participant}
+                  cancelled={cancelled}
+                  summary={feedback.byParticipant[participant.participantId]}
+                  formConfigured={feedback.formConfigured}
+                  onQr={() => onQr(participant)}
+                />
+              ))}
+            </ul>
+          </div>
+
+          <PresentationFeedback
+            presentation={presentation}
+            feedback={feedback}
+            responses={responses}
           />
-        ))}
-      </ul>
+        </div>
+      </Collapsible>
     </li>
+  );
+}
+
+function Detail({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <span className="flex flex-col">
+      <span className="type-overline">{label}</span>
+      <span className="text-[13px] font-medium">{children}</span>
+    </span>
   );
 }
 
 /**
  * One student in one presentation. The Received box saves as soon as it is
  * changed — the server decides, and the QR follows the saved state only.
+ * A table row on wide screens; a compact card on narrow ones.
  */
 function ParticipantRow({
   participant,
@@ -420,7 +492,7 @@ function ParticipantRow({
 }: {
   participant: PresentationParticipantRow;
   cancelled: boolean;
-  summary?: FeedbackSummary;
+  summary?: ParticipantFeedback;
   formConfigured: boolean;
   onQr: () => void;
 }) {
@@ -445,10 +517,22 @@ function ParticipantRow({
   }
 
   const received = participant.marked && !cancelled;
+  const showReceived = shown && !cancelled;
+  const counted = summary?.counted ?? 0;
 
   return (
-    <li className="flex flex-wrap items-center sm:flex-nowrap">
-      <label className="hover:bg-surface-hover flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors has-disabled:cursor-default">
+    <li className="hover:bg-surface-hover grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-2.5 transition-colors md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_8.5rem_8rem_5.5rem]">
+      <span className="min-w-0">
+        <span className="block truncate text-[13.5px] font-medium">{participant.studentName}</span>
+        {/* On narrow screens the venture sits under the name. */}
+        <span className="type-caption block truncate md:hidden">{participant.ventureName}</span>
+      </span>
+      <span className="type-secondary hidden truncate md:block">{participant.ventureName}</span>
+
+      <label
+        className="flex cursor-pointer items-center gap-2 has-disabled:cursor-default"
+        title={cancelled ? 'The presentation is cancelled' : 'Tick once this student has presented'}
+      >
         <input
           type="checkbox"
           checked={shown}
@@ -457,50 +541,152 @@ function ParticipantRow({
           aria-label={`${participant.studentName} presentation received`}
           className="border-input-border accent-primary size-4 shrink-0 rounded border"
         />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-medium">
-            {participant.studentName}
-          </span>
-          <span className="type-caption block truncate">
-            {participant.ventureName}
-            {participant.studentEmail ? ` · ${participant.studentEmail}` : ''}
-          </span>
-        </span>
-        <span className="flex shrink-0 flex-col items-end gap-1">
-          <Badge tone={shown && !cancelled ? 'success' : 'muted'}>
-            {shown && !cancelled ? 'Received' : 'Not received'}
-          </Badge>
-          {participant.receivedAt && !pending ? (
-            <span className="type-caption">{formatDate(participant.receivedAt)}</span>
-          ) : null}
-        </span>
+        <Badge tone={showReceived ? 'success' : 'muted'}>
+          {showReceived ? 'Received' : 'Pending'}
+        </Badge>
       </label>
 
-      {/* Outside the label, so pressing QR never toggles the checkbox. */}
-      <span className="flex w-full items-center gap-2 px-4 pb-2.5 sm:w-52 sm:shrink-0 sm:justify-end sm:pb-0">
-        {received && !pending ? (
-          <Button type="button" variant="secondary" size="sm" onClick={onQr}>
-            <QrCode className="size-3.5" aria-hidden="true" />
-            QR
-          </Button>
-        ) : (
-          <span className="type-caption">{pending ? 'Saving…' : 'QR unavailable'}</span>
-        )}
-        <span className="flex flex-col items-end">
-          <span className="text-[12.5px] font-medium tabular-nums">
-            Feedback {summary?.counted ?? 0}
+      <span className="col-span-2 flex items-center justify-between gap-3 md:col-span-1 md:contents">
+        <span>
+          {received && !pending ? (
+            <Button type="button" variant="secondary" size="sm" onClick={onQr}>
+              <QrCode className="size-3.5" aria-hidden="true" />
+              View QR
+            </Button>
+          ) : (
+            <span
+              className="type-caption"
+              title="Presentation not received. QR is unavailable until this student is marked Received."
+            >
+              {pending ? 'Saving…' : 'QR unavailable'}
+            </span>
+          )}
+        </span>
+        <span className="text-right text-[12.5px] tabular-nums">
+          <span className={cn('font-medium', counted === 0 && 'text-muted-foreground')}>
+            {counted}
             {formConfigured ? `/${summary?.required ?? 1}` : ''}
           </span>
           {summary?.complete ? (
-            <span className="text-success-soft-foreground inline-flex items-center gap-0.5 text-[11.5px] font-semibold">
-              <CheckCircle2 className="size-3" aria-hidden="true" />
+            <span className="text-success-soft-foreground block text-[11px] font-semibold">
               Complete
             </span>
           ) : participant.recordStatus === 'COMPLETED' ? (
-            <span className="type-caption">Stage completed</span>
+            <span className="type-caption block">Stage done</span>
           ) : null}
         </span>
       </span>
+    </li>
+  );
+}
+
+/**
+ * This presentation's mentor feedback, and only this presentation's: a
+ * summary line, then — on demand — every response, grouped by student.
+ */
+function PresentationFeedback({
+  presentation,
+  feedback,
+  responses,
+}: {
+  presentation: PresentationRow;
+  feedback: PresentationFeedbackSummary;
+  responses: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const withFeedback = presentation.participants.filter(
+    (p) => (feedback.byParticipant[p.participantId]?.entries.length ?? 0) > 0,
+  );
+
+  return (
+    <div className="surface-sunken border-t px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <MessagesSquare className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13.5px] font-medium">Mentor feedback</span>
+          <span className="type-caption block">
+            {responses > 0
+              ? `${plural(responses, 'response')} from mentors`
+              : feedback.formConfigured
+                ? 'No mentor feedback yet. Feedback submitted by mentors will appear here.'
+                : 'No feedback form is configured for this stage yet.'}
+          </span>
+        </span>
+        {withFeedback.length > 0 ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+          >
+            {open ? 'Hide feedback' : 'View feedback'}
+            <ChevronDown
+              className={cn('size-3.5 transition-transform duration-200', open && 'rotate-180')}
+              aria-hidden="true"
+            />
+          </Button>
+        ) : null}
+      </div>
+
+      {withFeedback.length > 0 ? (
+        <Collapsible open={open}>
+          <ul className="mt-3 space-y-2">
+            {withFeedback.map((participant) => (
+              <StudentFeedback
+                key={participant.participantId}
+                participant={participant}
+                summary={feedback.byParticipant[participant.participantId]!}
+              />
+            ))}
+          </ul>
+        </Collapsible>
+      ) : null}
+    </div>
+  );
+}
+
+/** One student's responses in one presentation, each mentor's kept separate. */
+function StudentFeedback({
+  participant,
+  summary,
+}: {
+  participant: PresentationParticipantRow;
+  summary: ParticipantFeedback;
+}) {
+  const [open, setOpen] = useState(false);
+  const superseded = summary.entries.length - summary.counted;
+
+  return (
+    <li className="rounded-control bg-surface border">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="hover:bg-surface-hover flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5 text-left transition-colors"
+      >
+        <span className="min-w-0 flex-1 text-[13.5px] font-medium">
+          {participant.studentName}
+          <span className="text-muted-foreground font-normal"> — {participant.ventureName}</span>
+        </span>
+        <span className="type-caption tabular-nums">
+          {plural(summary.counted, 'mentor response')}
+          {superseded > 0 ? ` · ${superseded} replaced` : ''}
+        </span>
+        {summary.complete ? <Badge tone="success">Complete</Badge> : null}
+        <ChevronDown
+          className={cn(
+            'text-muted-foreground size-4 shrink-0 transition-transform duration-200',
+            open && 'rotate-180',
+          )}
+          aria-hidden="true"
+        />
+      </button>
+      <Collapsible open={open}>
+        <div className="border-t p-3">
+          <MentorFeedbackEntries entries={summary.entries} showSuperseded />
+        </div>
+      </Collapsible>
     </li>
   );
 }
