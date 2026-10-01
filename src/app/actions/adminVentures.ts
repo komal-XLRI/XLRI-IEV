@@ -217,16 +217,17 @@ function revalidateMentorFeedback() {
   revalidatePath('/student', 'layout');
 }
 
-/** Sets, changes or clears the Google Form for one stage. */
+/** Sets, changes or clears the Google Form for one presentation. */
 export async function saveFeedbackFormConfigAction(
   _prev: unknown,
   formData: FormData,
-): Promise<ActionResult<{ completed: number }>> {
+): Promise<ActionResult<{ completed: number; ventureActivityId: string }>> {
   return runAction(async () => {
     const admin = await requireAdmin();
 
     const input = feedbackFormConfigSchema.parse({
-      ventureActivityId: value(formData, 'ventureActivityId'),
+      presentationId: value(formData, 'presentationId'),
+      title: submitted(formData, 'title'),
       prefillUrlTemplate: submitted(formData, 'prefillUrlTemplate') ?? '',
       enabled: formData.get('enabled') === 'on',
       requiredFeedbackCount: value(formData, 'requiredFeedbackCount'),

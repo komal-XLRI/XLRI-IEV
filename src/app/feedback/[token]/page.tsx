@@ -21,12 +21,12 @@ const MESSAGES = {
     description: 'This presentation has not been received yet. Feedback is currently unavailable.',
   },
   NO_FORM: {
-    title: 'Feedback form is not configured for this stage.',
+    title: 'Feedback form is not configured for this presentation.',
     description: 'Please let the programme office know so they can set it up.',
   },
   UNAVAILABLE: {
     title: 'Feedback is currently unavailable.',
-    description: 'Feedback for this stage has been paused by the programme office.',
+    description: 'Feedback for this presentation has been paused by the programme office.',
   },
 } as const;
 

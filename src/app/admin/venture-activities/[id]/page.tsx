@@ -11,7 +11,6 @@ import { listStagePresentations, listStageStudents } from '@/services/ventures/p
 import { listBehaviourForActivity } from '@/services/ventures/behaviourService';
 import { BehaviourPanel } from '@/components/admin/BehaviourPanel';
 import { getStageFeedback } from '@/services/ventures/mentorFeedbackService';
-import { FeedbackFormConfig } from '@/components/admin/FeedbackFormConfig';
 import { AutoRefresh } from '@/components/layout/AutoRefresh';
 import { listTerms } from '@/services/academic/academicService';
 import { EditVentureActivity } from '@/components/admin/EditVentureActivity';
@@ -77,7 +76,7 @@ export default async function EditVentureActivityPage({
         students={students}
         presentations={presentations}
         feedback={{
-          formConfigured: feedback.formConfigured,
+          forms: feedback.forms,
           // Each presentation shows its own mentor feedback, responses included.
           byParticipant: feedback.byParticipant,
           tally: feedback.tally,
@@ -86,13 +85,6 @@ export default async function EditVentureActivityPage({
 
       {/* Mentor feedback arrives from Google, outside any request on this page. */}
       <AutoRefresh />
-
-      <FeedbackFormConfig
-        ventureActivityId={id}
-        prefillUrlTemplate={feedback.prefillUrlTemplate}
-        enabled={feedback.formEnabled}
-        requiredFeedbackCount={feedback.requiredFeedbackCount}
-      />
 
       <BehaviourPanel rows={behaviour} />
 

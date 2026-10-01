@@ -37,7 +37,15 @@ import { PRESENTATION_STATUS_LABELS, type PresentationStatus } from '@/lib/const
 import { formatDate } from '@/lib/utils/dates';
 import { cn } from '@/lib/utils/cn';
 import type { StudentActivityStatus } from '@/lib/constants/status';
-import type { MentorFeedbackEntry } from '@/services/ventures/mentorFeedbackService';
+import type {
+  MentorFeedbackEntry,
+  PresentationFormView,
+} from '@/services/ventures/mentorFeedbackService';
+import { FeedbackFormModal } from './FeedbackFormModal';
+
+function presentationLabel(number: number): string {
+  return `Presentation ${String(number).padStart(2, '0')}`;
+}
 
 export interface StageStudentRow extends PresentationStudentOption {
   status: StudentActivityStatus;
@@ -74,7 +82,8 @@ type ParticipantFeedback = {
 };
 
 export interface PresentationFeedbackSummary {
-  formConfigured: boolean;
+  /** Each presentation's own form, keyed by presentation id; null = not configured. */
+  forms: Record<string, PresentationFormView | null>;
   byParticipant: Record<string, ParticipantFeedback>;
   tally: { received: number; complete: number; responses: number };
 }
@@ -131,6 +140,8 @@ export function PresentationsPanel({
     studentName: string;
   } | null>(null);
   const [deleting, setDeleting] = useState<PresentationRow | null>(null);
+  const [formOf, setFormOf] = useState<{ id: string; number: number } | null>(null);
+  const anyForm = Object.values(feedback.forms).some(Boolean);
   const [deletePending, startDelete] = useTransition();
 
   const stage = presentationStageState({
@@ -212,7 +223,7 @@ export function PresentationsPanel({
               />
             </div>
 
-            {feedback.formConfigured ? (
+            {anyForm ? (
               <div>
                 <div className="mb-1 flex items-baseline justify-between">
                   <span className="type-overline">Mentor feedback complete</span>
@@ -258,6 +269,7 @@ export function PresentationsPanel({
                   feedback={feedback}
                   onEdit={() => openEdit(presentation)}
                   onDelete={() => setDeleting(presentation)}
+                  onConfigureForm={() => setFormOf({ id: presentation.id, number: index + 1 })}
                   onQr={(participant) =>
                     setQrFor({
                       participantId: participant.participantId,
@@ -278,6 +290,20 @@ export function PresentationsPanel({
         ventureActivityId={ventureActivityId}
         students={students}
         editing={formFor === null || formFor === 'new' ? null : formFor}
+      />
+
+      <FeedbackFormModal
+        key={formOf?.id ?? 'closed'}
+        open={formOf !== null}
+        onClose={() => setFormOf(null)}
+        presentationId={formOf?.id ?? ''}
+        presentationLabel={formOf ? presentationLabel(formOf.number) : ''}
+        current={formOf ? (feedback.forms[formOf.id] ?? null) : null}
+        // Other presentations' forms, offered only as something to copy from.
+        copySources={presentations.flatMap((p, index) => {
+          const form = feedback.forms[p.id];
+          return form && p.id !== formOf?.id ? [{ label: presentationLabel(index + 1), form }] : [];
+        })}
       />
 
       <FeedbackQrModal
@@ -332,6 +358,7 @@ function PresentationCard({
   feedback,
   onEdit,
   onDelete,
+  onConfigureForm,
   onQr,
 }: {
   number: number;
@@ -340,9 +367,11 @@ function PresentationCard({
   feedback: PresentationFeedbackSummary;
   onEdit: () => void;
   onDelete: () => void;
+  onConfigureForm: () => void;
   onQr: (participant: PresentationParticipantRow) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const form = feedback.forms[presentation.id] ?? null;
   const cancelled = presentation.status === 'CANCELLED';
   const total = presentation.participants.length;
   const received = cancelled ? 0 : presentation.participants.filter((p) => p.marked).length;
@@ -350,7 +379,7 @@ function PresentationCard({
     (sum, p) => sum + (feedback.byParticipant[p.participantId]?.counted ?? 0),
     0,
   );
-  const label = `Presentation ${String(number).padStart(2, '0')}`;
+  const label = presentationLabel(number);
 
   return (
     <li className="rounded-control bg-surface overflow-hidden border">
@@ -451,7 +480,7 @@ function PresentationCard({
                   participant={participant}
                   cancelled={cancelled}
                   summary={feedback.byParticipant[participant.participantId]}
-                  formConfigured={feedback.formConfigured}
+                  formConfigured={form !== null}
                   onQr={() => onQr(participant)}
                 />
               ))}
@@ -460,8 +489,11 @@ function PresentationCard({
 
           <PresentationFeedback
             presentation={presentation}
+            form={form}
             feedback={feedback}
             responses={responses}
+            eligible={received}
+            onConfigure={onConfigureForm}
           />
         </div>
       </Collapsible>
@@ -548,11 +580,18 @@ function ParticipantRow({
 
       <span className="col-span-2 flex items-center justify-between gap-3 md:col-span-1 md:contents">
         <span>
-          {received && !pending ? (
+          {received && !pending && formConfigured ? (
             <Button type="button" variant="secondary" size="sm" onClick={onQr}>
               <QrCode className="size-3.5" aria-hidden="true" />
               View QR
             </Button>
+          ) : received && !pending ? (
+            <span
+              className="type-caption"
+              title="Configure this presentation's feedback form to enable the QR."
+            >
+              Form not set
+            </span>
           ) : (
             <span
               className="type-caption"
@@ -581,53 +620,106 @@ function ParticipantRow({
 }
 
 /**
- * This presentation's mentor feedback, and only this presentation's: a
- * summary line, then — on demand — every response, grouped by student.
+ * This presentation's mentor feedback, and only this presentation's: its own
+ * Google Form, a summary line, then — on demand — every response, grouped by
+ * student.
  */
 function PresentationFeedback({
   presentation,
+  form,
   feedback,
   responses,
+  eligible,
+  onConfigure,
 }: {
   presentation: PresentationRow;
+  form: PresentationFormView | null;
   feedback: PresentationFeedbackSummary;
   responses: number;
+  /** Received students — the ones whose QR works. */
+  eligible: number;
+  onConfigure: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const withFeedback = presentation.participants.filter(
     (p) => (feedback.byParticipant[p.participantId]?.entries.length ?? 0) > 0,
   );
 
+  const responsesButton =
+    withFeedback.length > 0 ? (
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        {open ? 'Hide responses' : 'View responses'}
+        <ChevronDown
+          className={cn('size-3.5 transition-transform duration-200', open && 'rotate-180')}
+          aria-hidden="true"
+        />
+      </Button>
+    ) : null;
+
   return (
     <div className="surface-sunken border-t px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
         <MessagesSquare className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1">
-          <span className="block text-[13.5px] font-medium">Mentor feedback</span>
-          <span className="type-caption block">
-            {responses > 0
-              ? `${plural(responses, 'response')} from mentors`
-              : feedback.formConfigured
-                ? 'No mentor feedback yet. Feedback submitted by mentors will appear here.'
-                : 'No feedback form is configured for this stage yet.'}
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-[13.5px] font-medium">Mentor feedback</span>
+            {form && !form.enabled ? <Badge tone="muted">Paused</Badge> : null}
           </span>
+          {form ? (
+            <span className="type-caption block">
+              <span className="text-foreground font-medium">{form.title || 'Google Form'}</span>
+              {' · '}
+              {plural(responses, 'response')} · {plural(eligible, 'student')} eligible
+            </span>
+          ) : (
+            <span className="type-caption block">
+              No feedback form configured for this presentation.
+            </span>
+          )}
         </span>
-        {withFeedback.length > 0 ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-          >
-            {open ? 'Hide feedback' : 'View feedback'}
-            <ChevronDown
-              className={cn('size-3.5 transition-transform duration-200', open && 'rotate-180')}
-              aria-hidden="true"
-            />
-          </Button>
-        ) : null}
+
+        <span className="flex flex-wrap gap-2">
+          {form ? (
+            <>
+              <a
+                href={form.viewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="border-border hover:bg-surface-hover inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors"
+              >
+                View form
+                <ExternalLink className="size-3.5" aria-hidden="true" />
+              </a>
+              {responsesButton}
+              <Button type="button" variant="ghost" size="sm" onClick={onConfigure}>
+                <Pencil className="size-3.5" aria-hidden="true" />
+                Edit form
+              </Button>
+            </>
+          ) : (
+            <>
+              {/* Feedback given before a form was removed is still history. */}
+              {responsesButton}
+              <Button type="button" size="sm" onClick={onConfigure}>
+                <Plus className="size-3.5" aria-hidden="true" />
+                Configure feedback form
+              </Button>
+            </>
+          )}
+        </span>
       </div>
+
+      {form && responses === 0 && withFeedback.length === 0 ? (
+        <p className="type-caption mt-2">
+          No mentor feedback yet. Feedback submitted by mentors will appear here.
+        </p>
+      ) : null}
 
       {withFeedback.length > 0 ? (
         <Collapsible open={open}>

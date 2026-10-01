@@ -18,11 +18,8 @@ export { SubjectSession, type ISubjectSession } from './SubjectSession';
 export { SubjectAttendance, type ISubjectAttendance } from './SubjectAttendance';
 
 export { StudentVenture, type IStudentVenture } from './StudentVenture';
-export {
-  VentureActivity,
-  type IVentureActivity,
-  type IFeedbackFormConfig,
-} from './VentureActivity';
+export { VentureActivity, type IVentureActivity } from './VentureActivity';
+export type { IFeedbackFormConfig } from './feedbackFormConfig';
 export { ActivitySupportMapping, type IActivitySupportMapping } from './ActivitySupportMapping';
 export { StudentVentureActivity, type IStudentVentureActivity } from './StudentVentureActivity';
 export {

@@ -54,7 +54,6 @@ let aStage1: string; // student A, stage 1 record
 let aStage2: string;
 let bStage1: string;
 let cStage1: string;
-let savedForms: Record<string, unknown> = {};
 
 // Participants: one student in one presentation.
 let pA1: string; // A in the 10 Sep presentation of stage 1
@@ -63,6 +62,7 @@ let pC1: string;
 let pA2: string; // A in stage 2
 let pA1Again: string; // A in a second, 17 Sep presentation of stage 1
 let sitting1: string;
+let sitting2: string; // the stage-2 presentation
 let sittingAgain: string;
 
 function tokenFromUrl(url: string): string {
@@ -157,9 +157,6 @@ beforeAll(async () => {
   if (activities.length < 2) throw new Error('Run `npm run seed` before the integration tests.');
   stage1Id = activities[0]!._id.toString();
   stage2Id = activities[1]!._id.toString();
-  savedForms = Object.fromEntries(
-    activities.map((a) => [a._id.toString(), a.feedbackForm ?? null]),
-  );
 
   const admin = await models.User.findOne({ role: 'ADMIN' }).select('_id').lean().exec();
   if (!admin) throw new Error('Run `npm run seed` before the integration tests.');
@@ -173,21 +170,6 @@ beforeAll(async () => {
   bStage1 = b.recordOn(stage1Id);
   cStage1 = c.recordOn(stage1Id);
 
-  // Stage 1 starts without a form; stage 2 gets form B.
-  await models.VentureActivity.updateOne(
-    { _id: stage1Id },
-    { $set: { feedbackForm: null } },
-  ).exec();
-  await svc.saveFeedbackFormConfig(
-    {
-      ventureActivityId: stage2Id,
-      prefillUrlTemplate: template(FORM_B),
-      enabled: true,
-      requiredFeedbackCount: 1,
-    },
-    adminId,
-  );
-
   // 10 Sep: three students scheduled on stage 1.
   const first = await addPresentation(
     stage1Id,
@@ -200,20 +182,29 @@ beforeAll(async () => {
   pB1 = first.participant(bStage1);
   pC1 = first.participant(cStage1);
 
-  pA2 = (
-    await addPresentation(
-      stage2Id,
-      [aStage2],
-      '2026-09-24',
-      'https://drive.google.com/drive/folders/drive-s2',
-    )
-  ).participant(aStage2);
+  const second = await addPresentation(
+    stage2Id,
+    [aStage2],
+    '2026-09-24',
+    'https://drive.google.com/drive/folders/drive-s2',
+  );
+  sitting2 = second.presentationId;
+  pA2 = second.participant(aStage2);
+
+  // The 10 Sep presentation starts without a form; the stage-2 one gets form B.
+  await svc.saveFeedbackFormConfig(
+    {
+      presentationId: sitting2,
+      title: 'Stage two form',
+      prefillUrlTemplate: template(FORM_B),
+      enabled: true,
+      requiredFeedbackCount: 1,
+    },
+    adminId,
+  );
 });
 
 afterAll(async () => {
-  for (const [id, form] of Object.entries(savedForms)) {
-    await models.VentureActivity.updateOne({ _id: id }, { $set: { feedbackForm: form } }).exec();
-  }
   await models.MentorFeedback.deleteMany({ studentVentureId: { $in: ventureIds } }).exec();
   await models.FeedbackSyncLog.deleteMany({
     studentVentureActivityId: { $in: [aStage1, aStage2, bStage1, cStage1] },
@@ -256,7 +247,7 @@ describe('TEST 1 — pending presentation', () => {
   });
 });
 
-describe('TEST 10 — received, but no form configured for the stage', () => {
+describe('TEST 10 — received, but no form configured for the presentation', () => {
   it('refuses a QR with a clear message and issues no token', async () => {
     await tick(pA1);
     await tick(pB1);
@@ -265,7 +256,7 @@ describe('TEST 10 — received, but no form configured for the stage', () => {
     expect(result.available).toBe(false);
     if (!result.available) {
       expect(result.reason).toBe('NO_FORM');
-      expect(result.message).toBe('Feedback form is not configured for this stage.');
+      expect(result.message).toBe('Feedback form is not configured for this presentation.');
     }
     const participant = await models.PresentationParticipant.findById(pA1).lean().exec();
     expect(participant!.feedbackToken ?? null).toBeNull();
@@ -279,7 +270,8 @@ describe('TEST 2 / 3 — received student with a configured form', () => {
   it('issues a QR pointing at the portal, never at Google', async () => {
     await svc.saveFeedbackFormConfig(
       {
-        ventureActivityId: stage1Id,
+        presentationId: sitting1,
+        title: 'Stage one form',
         prefillUrlTemplate: template(FORM_A),
         enabled: true,
         requiredFeedbackCount: 2,
@@ -325,7 +317,7 @@ describe('TEST 2 / 3 — received student with a configured form', () => {
   });
 });
 
-describe('TEST 4 — different stages use different forms', () => {
+describe('TEST 4 — different presentations use different forms', () => {
   it('routes stage 2 to form B', async () => {
     await tick(pA2);
     const resolved = await svc.resolveFeedbackLink(await qrToken(pA2));
@@ -438,8 +430,40 @@ describe('several presentations on one stage', () => {
     );
   });
 
-  it('gives the same student a separate QR for the later presentation', async () => {
+  it('starts without a form — it does not inherit the earlier presentation’s', async () => {
     await tick(pA1Again);
+    const qr = await svc.getFeedbackQr(pA1Again, BASE);
+    expect(!qr.available && qr.reason).toBe('NO_FORM');
+    if (!qr.available) {
+      expect(qr.message).toBe('Feedback form is not configured for this presentation.');
+    }
+    const stage = await svc.getStageFeedback(stage1Id);
+    expect(stage.forms[sitting1]).not.toBeNull();
+    expect(stage.forms[sittingAgain]).toBeNull();
+  });
+
+  it('gets its own form once the admin configures one for it', async () => {
+    await svc.saveFeedbackFormConfig(
+      {
+        presentationId: sittingAgain,
+        title: 'Re-presentation form',
+        prefillUrlTemplate: template(FORM_A),
+        enabled: true,
+        requiredFeedbackCount: 1,
+      },
+      adminId,
+    );
+    const stage = await svc.getStageFeedback(stage1Id);
+    expect(stage.forms[sittingAgain]).toMatchObject({
+      title: 'Re-presentation form',
+      requiredFeedbackCount: 1,
+      viewUrl: `https://docs.google.com/forms/d/e/${FORM_A}/viewform`,
+    });
+    // Presentation 01 keeps its own settings.
+    expect(stage.forms[sitting1]).toMatchObject({ requiredFeedbackCount: 2 });
+  });
+
+  it('gives the same student a separate QR for the later presentation', async () => {
     tokenA1Again = await qrToken(pA1Again);
     expect(tokenA1Again).not.toBe(tokenA1);
     const resolved = await svc.resolveFeedbackLink(tokenA1Again);
@@ -637,10 +661,11 @@ describe('TEST 12 — invalid and tampered tokens', () => {
     ).toBe(0);
   });
 
-  it('pausing a stage’s form makes the link unavailable', async () => {
+  it('pausing a presentation’s form makes the link unavailable', async () => {
     await svc.saveFeedbackFormConfig(
       {
-        ventureActivityId: stage1Id,
+        presentationId: sitting1,
+        title: 'Stage one form',
         prefillUrlTemplate: template(FORM_A),
         enabled: false,
         requiredFeedbackCount: 2,

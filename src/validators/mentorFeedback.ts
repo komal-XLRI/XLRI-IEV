@@ -13,12 +13,19 @@ export const feedbackToken = z.string().regex(FEEDBACK_TOKEN_PATTERN, 'Invalid f
 // ------------------------------------------------ Admin configuration ----
 
 /**
- * A stage's Google Form. A blank link clears the configuration; otherwise the
- * link must be a real pre-filled link carrying the {{IEV_TOKEN}} placeholder.
+ * One presentation's Google Form. A blank link clears the configuration;
+ * otherwise the link must be a real pre-filled link carrying the {{IEV_TOKEN}}
+ * placeholder.
  */
 export const feedbackFormConfigSchema = z
   .object({
-    ventureActivityId: objectId,
+    presentationId: objectId,
+    title: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .transform((v) => v || null),
     prefillUrlTemplate: z.string().trim().max(4000),
     enabled: z.boolean(),
     requiredFeedbackCount: z.coerce

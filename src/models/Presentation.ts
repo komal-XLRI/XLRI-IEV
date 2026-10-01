@@ -1,5 +1,6 @@
 import { Schema, type Model, type Types } from 'mongoose';
 import { PRESENTATION_STATUSES, type PresentationStatus } from '@/lib/constants/presentations';
+import { feedbackFormConfigSchema, type IFeedbackFormConfig } from './feedbackFormConfig';
 import { registerModel } from './registerModel';
 
 /**
@@ -24,6 +25,12 @@ export interface IPresentation {
 
   status: PresentationStatus;
 
+  /**
+   * The Google Form mentors fill in for this presentation. Each presentation
+   * has its own; none is inherited from the stage or another presentation.
+   */
+  feedbackForm?: IFeedbackFormConfig | null;
+
   /** Created by the one-off migration from the old per-stage checklist. */
   migratedFromChecklist: boolean;
 
@@ -45,6 +52,8 @@ const presentationSchema = new Schema<IPresentation>(
 
     status: { type: String, required: true, enum: PRESENTATION_STATUSES, default: 'SCHEDULED' },
 
+    feedbackForm: { type: feedbackFormConfigSchema, default: null },
+
     migratedFromChecklist: { type: Boolean, required: true, default: false },
 
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
@@ -54,6 +63,7 @@ const presentationSchema = new Schema<IPresentation>(
 );
 
 presentationSchema.index({ ventureActivityId: 1, presentedOn: 1 });
+presentationSchema.index({ 'feedbackForm.publishedFormId': 1 }, { sparse: true });
 
 export const Presentation: Model<IPresentation> = registerModel<IPresentation>(
   'Presentation',

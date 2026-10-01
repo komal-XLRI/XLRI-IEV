@@ -18,10 +18,16 @@
  *     printed keeps working;
  *   - their mentor feedback is attached to that presentation.
  *
- * Nothing is deleted: stage records keep their received date (it is still the
- * summary the timeline reads), and the stage's folder link is left in place.
- * The old unique index on stage-record tokens is dropped once it is empty.
- * Safe to run more than once. Run with:
+ * The mentor feedback form now belongs to each presentation, not the stage. A
+ * stage that still has a stage-level form has it copied onto each of its
+ * existing presentations that has none — so QR codes already in use keep
+ * leading to the same form — and then removed from the stage, so presentations
+ * created afterwards start without a form.
+ *
+ * Nothing else is deleted: stage records keep their received date (it is
+ * still the summary the timeline reads), and the stage's folder link is left
+ * in place. The old unique index on stage-record tokens is dropped once it is
+ * empty. Safe to run more than once. Run with:
  *
  *   npm run migrate:presentations
  *
@@ -199,7 +205,37 @@ async function main() {
     }
   }
 
+  // Stage-level feedback forms → each existing presentation of that stage.
+  // Raw collections: the stage field is no longer in the schema.
+  const stages = models.VentureActivity.collection;
+  const withStageForm = await stages
+    .find({ feedbackForm: { $type: 'object' } })
+    .project({ activityCode: 1, feedbackForm: 1 })
+    .toArray();
+  let formsCopied = 0;
+  for (const stage of withStageForm) {
+    const filter = { ventureActivityId: stage._id, feedbackForm: null };
+    const count = await models.Presentation.countDocuments(filter).exec();
+    console.log(
+      `  ${stage.activityCode}: stage feedback form → ${count} presentation(s) without one.`,
+    );
+    if (dry) {
+      formsCopied += count;
+      continue;
+    }
+    const copied = await models.Presentation.collection.updateMany(filter, {
+      $set: { feedbackForm: { title: null, ...stage.feedbackForm } },
+    });
+    formsCopied += copied.modifiedCount;
+    await stages.updateOne({ _id: stage._id }, { $unset: { feedbackForm: '' } });
+  }
+
   if (!dry) {
+    const stageIndexes = await stages.indexes();
+    if (stageIndexes.some((index) => index.name === 'feedbackForm.publishedFormId_1')) {
+      await stages.dropIndex('feedbackForm.publishedFormId_1');
+    }
+
     const indexes = await records.indexes();
     if (indexes.some((index) => index.name === 'feedbackToken_1')) {
       const left = await records.countDocuments({ feedbackToken: { $type: 'string' } });
@@ -213,7 +249,8 @@ async function main() {
   console.log(
     `${dry ? 'Dry run: would create' : 'Created'} ${presentationsCreated} presentation(s) and ` +
       `${participantsCreated} participant(s); ${dry ? 'would move' : 'moved'} ${tokensMoved} QR token(s)` +
-      (dry ? '.' : `; attached ${feedbackAttached} feedback response(s).`),
+      (dry ? '' : `; attached ${feedbackAttached} feedback response(s)`) +
+      `; ${dry ? 'would copy' : 'copied'} the stage feedback form onto ${formsCopied} presentation(s).`,
   );
 
   await mongoose.disconnect();

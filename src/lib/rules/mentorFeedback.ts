@@ -89,7 +89,12 @@ export function supersededResponseIds<
  * only — a student who has not presented cannot be owed feedback.
  */
 export function feedbackTally(
-  records: ReadonlyArray<{ received: boolean; countedResponses: number }>,
+  records: ReadonlyArray<{
+    received: boolean;
+    countedResponses: number;
+    /** Each presentation has its own form, so its own required count. */
+    requiredFeedbackCount?: number;
+  }>,
   requiredFeedbackCount: number,
 ) {
   const received = records.filter((r) => r.received);
@@ -100,7 +105,7 @@ export function feedbackTally(
       isFeedbackComplete({
         received: true,
         countedResponses: r.countedResponses,
-        requiredFeedbackCount,
+        requiredFeedbackCount: r.requiredFeedbackCount ?? requiredFeedbackCount,
       }),
     ).length,
     responses: received.reduce((sum, r) => sum + r.countedResponses, 0),

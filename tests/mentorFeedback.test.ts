@@ -188,7 +188,7 @@ describe('Google Form pre-filled links', () => {
 
   it('validates the stage form configuration', () => {
     const base = {
-      ventureActivityId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+      presentationId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
       enabled: true,
       requiredFeedbackCount: '2',
     };
