@@ -6,8 +6,13 @@ import { Modal } from '@/components/ui/Modal';
 import { Button, SubmitButton } from '@/components/ui/Button';
 import { Checkbox, Field, Select, TextArea, TextInput } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
+import { Badge } from '@/components/ui/Badge';
 import { saveFeedbackFormConfigAction } from '@/app/actions/adminVentures';
-import { FEEDBACK_PLACEHOLDERS, TOKEN_QUESTION_TITLE } from '@/lib/feedback/googleForm';
+import {
+  FEEDBACK_PLACEHOLDERS,
+  TOKEN_QUESTION_TITLE,
+  checkPrefillTemplate,
+} from '@/lib/feedback/googleForm';
 import {
   DEFAULT_REQUIRED_FEEDBACK_COUNT,
   MAX_REQUIRED_FEEDBACK_COUNT,
@@ -139,6 +144,8 @@ export function FeedbackFormModal({
               />
             </Field>
 
+            <PrefillCheck template={template} />
+
             <details className="surface-sunken rounded-control border px-3 py-2 text-[13px]">
               <summary className="cursor-pointer font-medium">How to get this link</summary>
               <ol className="type-secondary mt-2 list-decimal space-y-1 pl-5">
@@ -151,10 +158,15 @@ export function FeedbackFormModal({
                 </li>
                 <li>
                   Answer that question with{' '}
-                  <span className="font-mono">{FEEDBACK_PLACEHOLDERS.token}</span>. Optionally
-                  answer the student, venture, stage and date questions with{' '}
-                  <span className="font-mono">{FEEDBACK_PLACEHOLDERS.student}</span>,{' '}
-                  <span className="font-mono">{FEEDBACK_PLACEHOLDERS.venture}</span>,{' '}
+                  <span className="font-mono">{FEEDBACK_PLACEHOLDERS.token}</span>.
+                </li>
+                <li>
+                  Make the student question a <em>Short answer</em> (not a dropdown — Google cannot
+                  prefill a dropdown with each student) and answer it with{' '}
+                  <span className="font-mono">
+                    {FEEDBACK_PLACEHOLDERS.student} — {FEEDBACK_PLACEHOLDERS.venture}
+                  </span>
+                  . Optionally answer stage and date questions with{' '}
                   <span className="font-mono">{FEEDBACK_PLACEHOLDERS.stage}</span> and{' '}
                   <span className="font-mono">{FEEDBACK_PLACEHOLDERS.date}</span>.
                 </li>
@@ -201,5 +213,47 @@ export function FeedbackFormModal({
         )}
       </ActionForm>
     </Modal>
+  );
+}
+
+const PREFILL_LABELS: Record<keyof typeof FEEDBACK_PLACEHOLDERS, string> = {
+  token: 'Presentation ID',
+  student: 'Student',
+  venture: 'Venture',
+  stage: 'Stage',
+  date: 'Date',
+};
+
+/**
+ * What the pasted link will fill in for the mentor. The student is always
+ * identified by the QR's token on the server; prefilling the student question
+ * only saves the mentor from picking — and from picking the wrong one.
+ */
+function PrefillCheck({ template }: { template: string }) {
+  if (template.trim() === '') return null;
+  const check = checkPrefillTemplate(template);
+  if (!check.ok) return null; // The field's own error explains it on save.
+
+  const filled = new Set(check.placeholders);
+  return (
+    <div className="surface-sunken rounded-control space-y-1.5 border px-3 py-2 text-[13px]">
+      <p className="flex flex-wrap items-center gap-1.5">
+        <span className="type-overline mr-1">Prefilled for the mentor</span>
+        {(Object.keys(PREFILL_LABELS) as Array<keyof typeof PREFILL_LABELS>).map((key) => (
+          <Badge key={key} tone={filled.has(key) ? 'success' : 'muted'}>
+            {filled.has(key) ? '✓ ' : ''}
+            {PREFILL_LABELS[key]}
+          </Badge>
+        ))}
+      </p>
+      {filled.has('student') ? null : (
+        <p className="text-warning-soft-foreground">
+          The student isn’t prefilled, so mentors will have to choose the student themselves.
+          Feedback is still saved against the student whose QR was scanned, but making the student
+          question a Short answer prefilled with {FEEDBACK_PLACEHOLDERS.student} avoids the extra
+          step.
+        </p>
+      )}
+    </div>
   );
 }

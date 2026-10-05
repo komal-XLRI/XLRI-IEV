@@ -639,6 +639,31 @@ describe('cancelling, editing and deleting a presentation', () => {
   });
 });
 
+describe('the QR decides the student, not the form', () => {
+  it('stores feedback against the QR’s student even if the form names another', async () => {
+    // A's QR on the 17 Sep presentation, but the mentor picked B in the form.
+    await svc.ingestGoogleFormFeedback(
+      payload({
+        token: tokenA1Again,
+        responseId: `${SUFFIX}-wrong-name`,
+        respondentEmail: 'mentor4@example.test',
+        answers: [
+          { question: 'IEV Presentation ID (do not edit)', type: 'TEXT', answer: tokenA1Again },
+          { question: 'Student & Venture Name', type: 'LIST', answer: 'Feedback Student B' },
+          { question: 'Strengths', type: 'PARAGRAPH_TEXT', answer: 'Good.' },
+        ],
+      }),
+    );
+    const doc = await models.MentorFeedback.findOne({ googleResponseId: `${SUFFIX}-wrong-name` })
+      .lean()
+      .exec();
+    expect(doc!.participantId!.toString()).toBe(pA1Again);
+    expect(doc!.presentationId!.toString()).toBe(sittingAgain);
+    expect(doc!.studentId.toString()).toBe(studentIds[0]); // A, from the token
+    expect(doc!.studentVentureActivityId.toString()).toBe(aStage1);
+  });
+});
+
 describe('TEST 12 — invalid and tampered tokens', () => {
   it('rejects malformed and unknown tokens at the redirect', async () => {
     expect(await svc.resolveFeedbackLink('not-a-token')).toEqual({ ok: false, reason: 'INVALID' });

@@ -776,6 +776,14 @@ function StudentFeedback({
       </button>
       <Collapsible open={open}>
         <div className="border-t p-3">
+          {/* The association is the QR's, not whatever the form's student
+              question says — make that visible where it matters. */}
+          <p className="type-caption mb-2">
+            Student from QR:{' '}
+            <span className="text-foreground font-medium">
+              {participant.studentName} — {participant.ventureName}
+            </span>
+          </p>
           <MentorFeedbackEntries entries={summary.entries} showSuperseded />
         </div>
       </Collapsible>

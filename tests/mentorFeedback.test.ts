@@ -180,6 +180,30 @@ describe('Google Form pre-filled links', () => {
     expect(filled.searchParams.get('entry.444')).toBe('Understanding Customers & Market Sizing');
   });
 
+  it('fills one form differently per student, with student and venture in one answer', () => {
+    // One presentation's form; the "Student & Venture Name" question is a
+    // Short answer prefilled with both placeholders.
+    const shared =
+      `https://docs.google.com/forms/d/e/${FORM_ID}/viewform?usp=pp_url` +
+      '&entry.1=%7B%7BIEV_TOKEN%7D%7D' +
+      '&entry.2=%7B%7BIEV_STUDENT%7D%7D+%E2%80%94+%7B%7BIEV_VENTURE%7D%7D';
+    const forStudent = (token: string, student: string, venture: string) =>
+      new URL(
+        fillPrefillTemplate(shared, { token, student, venture, stage: 'V01', date: '01 Oct 2026' }),
+      );
+
+    const a = forStudent('TOKEN_A', 'Asha Rao', 'Kiln Café');
+    const b = forStudent('TOKEN_B', 'Bilal Khan', 'Loom Labs');
+    expect(a.pathname).toBe(b.pathname); // the same Google Form
+    expect(a.searchParams.get('entry.1')).toBe('TOKEN_A');
+    expect(a.searchParams.get('entry.2')).toBe('Asha Rao — Kiln Café');
+    expect(b.searchParams.get('entry.1')).toBe('TOKEN_B');
+    expect(b.searchParams.get('entry.2')).toBe('Bilal Khan — Loom Labs');
+
+    const check = checkPrefillTemplate(shared);
+    expect(check.ok && check.placeholders.sort()).toEqual(['student', 'token', 'venture']);
+  });
+
   it('recognises the token question by its title', () => {
     expect(isTokenQuestion('IEV Presentation ID (do not edit)')).toBe(true);
     expect(isTokenQuestion('  iev presentation id')).toBe(true);

@@ -50,10 +50,16 @@ Do this once for each Google Form. Nothing in the portal's code changes per form
 7. **Get the pre-filled link.** Form editor → ⋮ → *Get pre-filled link*.
    Answer:
    - `IEV Presentation ID (do not edit)` → `{{IEV_TOKEN}}`
-   - Student/Team → `{{IEV_STUDENT}}` *(optional)*
-   - Venture → `{{IEV_VENTURE}}` *(optional)*
+   - Student & Venture Name → `{{IEV_STUDENT}} — {{IEV_VENTURE}}` *(recommended)*
    - Stage → `{{IEV_STAGE}}` *(optional)*
    - Presentation date → `{{IEV_DATE}}` *(optional)*
+
+   The student question must be a **Short answer**, not a dropdown: Google can
+   only prefill a dropdown with one of its fixed options, so a dropdown would
+   make mentors pick the student by hand. One placeholder or several can go in
+   one answer, as above. Whatever that question ends up saying, the portal
+   stores the feedback against the student whose QR was scanned — the token is
+   the only thing it trusts.
 
    Click *Get link* → *Copy link*. It must be the long
    `https://docs.google.com/forms/d/e/…/viewform?usp=pp_url&entry…` link, not a
