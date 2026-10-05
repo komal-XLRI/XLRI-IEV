@@ -87,7 +87,7 @@ export function DeleteStudentButton({
             <p>
               This permanently removes the student account and everything in their name: their
               venture, activity and presentation records, any submissions, reviews and uploaded
-              files, all attendance, workshop feedback and HR & behaviour feedback.
+              files, all attendance, workshop feedback, HR & behaviour feedback and mentor feedback.
             </p>
             <p className="mt-2 font-medium">This cannot be undone.</p>
             <p className="text-muted-foreground mt-2">

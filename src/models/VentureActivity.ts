@@ -24,6 +24,9 @@ export interface IVentureActivity {
    */
   presentationFolderUrl?: string | null;
 
+  // The mentor feedback form is not here: each presentation has its own, on
+  // `Presentation.feedbackForm`.
+
   status: ContentStatus;
 
   createdAt: Date;

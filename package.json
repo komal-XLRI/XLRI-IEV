@@ -19,6 +19,7 @@
     "seed:cohort": "tsx --tsconfig tsconfig.scripts.json scripts/seed-cohort.ts",
     "migrate:attendance": "tsx --tsconfig tsconfig.scripts.json scripts/migrate-venture-attendance.ts",
     "migrate:attempts": "tsx --tsconfig tsconfig.scripts.json scripts/migrate-remove-attempts.ts",
+    "migrate:presentations": "tsx --tsconfig tsconfig.scripts.json scripts/migrate-presentation-instances.ts",
     "verify": "npm run typecheck && npm run lint && npm run test",
     "check:smtp": "tsx --tsconfig tsconfig.scripts.json scripts/check-smtp.ts"
   },
@@ -33,6 +34,7 @@
     "next": "16.3.0",
     "nodemailer": "^9.0.5",
     "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "resend": "^6.18.1",
@@ -43,6 +45,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.2.4",

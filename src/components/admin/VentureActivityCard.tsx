@@ -21,13 +21,15 @@ export interface VentureActivityView {
   startDate: string | null;
   endDate: string | null;
   durationDays: number;
-  /** The stage's shared Drive folder for presentations, if set. */
-  presentationFolderUrl: string | null;
-  /** Students whose presentation is confirmed in the folder. */
+  /** Presentations held or scheduled on this stage. */
+  presentationCount: number;
+  /** Students with a received presentation on this stage. */
   presentationsReceived: number;
   presentationStage: PresentationStageState;
   /** Students who have HR & behaviour feedback on this stage. */
   behaviourGiven: number;
+  /** Mentor feedback complete, out of received presentations only. */
+  mentorFeedback: { received: number; complete: number; configured: boolean };
   status: string;
   supportCodes: string[];
   /** Cohort progress; null when no student has reached this activity yet. */
@@ -129,20 +131,13 @@ export function VentureActivityCard({ activity }: { activity: VentureActivityVie
           <div>
             <dt className="type-overline flex items-center gap-1">
               <FolderOpen className="size-3" aria-hidden="true" />
-              Drive folder
+              Presentations
             </dt>
-            <dd className="mt-0.5 text-[13px] font-medium">
-              {activity.presentationFolderUrl ? (
-                <a
-                  href={activity.presentationFolderUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  Open folder
-                </a>
+            <dd className="mt-0.5 text-[13px] font-medium tabular-nums">
+              {activity.presentationCount > 0 ? (
+                activity.presentationCount
               ) : (
-                <span className="text-muted-foreground">Not set</span>
+                <span className="text-muted-foreground">None yet</span>
               )}
             </dd>
           </div>
@@ -157,7 +152,10 @@ export function VentureActivityCard({ activity }: { activity: VentureActivityVie
           </Badge>
           {activity.total > 0 ? (
             <span className="type-caption ml-auto tabular-nums">
-              HR feedback {activity.behaviourGiven}/{activity.total}
+              {activity.mentorFeedback.configured
+                ? `Feedback ${activity.mentorFeedback.complete}/${activity.mentorFeedback.received} · `
+                : 'No feedback form · '}
+              HR {activity.behaviourGiven}/{activity.total}
             </span>
           ) : null}
         </div>

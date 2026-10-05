@@ -56,6 +56,19 @@ const envSchema = z
     CLOUDINARY_API_SECRET: z.preprocess(emptyToUndefined, z.string().optional()),
     CLOUDINARY_UPLOAD_FOLDER: z.string().default('iev-tracker/evidence'),
 
+    // Public base URL of the portal, used inside mentor-feedback QR codes. Must
+    // be reachable from a mentor's phone — a localhost URL scans but never
+    // loads. Unset, the host of the current request is used instead.
+    APP_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
+
+    // Shared with the Google Apps Script that forwards Form responses. It signs
+    // every request (HMAC-SHA256), so it is a credential: .env.local and Apps
+    // Script Properties only. Unset, the feedback webhook refuses everything.
+    FEEDBACK_WEBHOOK_SECRET: z.preprocess(
+      emptyToUndefined,
+      z.string().min(32, 'FEEDBACK_WEBHOOK_SECRET must be at least 32 characters').optional(),
+    ),
+
     SEED_ADMIN_EMAIL: z.string().email().default('admin@example.com'),
     SEED_ADMIN_NAME: z.string().default('IEV Administrator'),
 

@@ -45,8 +45,9 @@ export interface IStudentVentureActivity {
   currentSubmissionId?: Types.ObjectId | null;
 
   /**
-   * When the administrator confirmed this student's presentation is in the
-   * activity's Drive folder, and who confirmed it. Null until then.
+   * When this student first presented on this stage, and who marked it — a
+   * summary kept in step with their `PresentationParticipant` rows, where each
+   * presentation's own received mark lives. Null while none is received.
    */
   presentationReceivedAt?: Date | null;
   presentationMarkedBy?: Types.ObjectId | null;

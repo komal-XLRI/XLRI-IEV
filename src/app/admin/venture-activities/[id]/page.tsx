@@ -7,9 +7,11 @@ import {
   getVentureActivity,
   listSupportActivities,
 } from '@/services/ventures/ventureActivityService';
-import { listPresentationsForActivity } from '@/services/ventures/presentationService';
+import { listStagePresentations, listStageStudents } from '@/services/ventures/presentationService';
 import { listBehaviourForActivity } from '@/services/ventures/behaviourService';
 import { BehaviourPanel } from '@/components/admin/BehaviourPanel';
+import { getStageFeedback } from '@/services/ventures/mentorFeedbackService';
+import { AutoRefresh } from '@/components/layout/AutoRefresh';
 import { listTerms } from '@/services/academic/academicService';
 import { EditVentureActivity } from '@/components/admin/EditVentureActivity';
 import { PresentationsPanel } from '@/components/admin/PresentationsPanel';
@@ -27,21 +29,31 @@ export default async function EditVentureActivityPage({
   const { id } = await params;
   if (!isValidObjectId(id)) notFound();
 
-  const [activity, terms, allSupports, mappedSupports, presentations, behaviour] =
-    await Promise.all([
-      getVentureActivity(id),
-      listTerms(),
-      listSupportActivities(),
-      getSupportActivitiesForVentureActivity(id),
-      listPresentationsForActivity(id),
-      listBehaviourForActivity(id),
-    ]);
+  const [
+    activity,
+    terms,
+    allSupports,
+    mappedSupports,
+    students,
+    presentations,
+    behaviour,
+    feedback,
+  ] = await Promise.all([
+    getVentureActivity(id),
+    listTerms(),
+    listSupportActivities(),
+    getSupportActivitiesForVentureActivity(id),
+    listStageStudents(id),
+    listStagePresentations(id),
+    listBehaviourForActivity(id),
+    getStageFeedback(id),
+  ]);
 
   return (
     <>
       <PageHeader
         title={`${activity.activityCode} · ${activity.name}`}
-        description="Student presentations, HR & behaviour feedback, dates and the support activities that feed this stage."
+        description="Student presentations, mentor feedback, HR & behaviour feedback, dates and the support activities that feed this stage."
         action={
           <span className="flex flex-wrap items-center gap-3">
             {/* Attendance moved to its own register; this is the same activity,
@@ -61,9 +73,18 @@ export default async function EditVentureActivityPage({
 
       <PresentationsPanel
         ventureActivityId={id}
-        folderUrl={activity.presentationFolderUrl ?? null}
-        rows={presentations}
+        students={students}
+        presentations={presentations}
+        feedback={{
+          forms: feedback.forms,
+          // Each presentation shows its own mentor feedback, responses included.
+          byParticipant: feedback.byParticipant,
+          tally: feedback.tally,
+        }}
       />
+
+      {/* Mentor feedback arrives from Google, outside any request on this page. */}
+      <AutoRefresh />
 
       <BehaviourPanel rows={behaviour} />
 
