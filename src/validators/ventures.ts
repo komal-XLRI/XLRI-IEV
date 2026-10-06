@@ -38,6 +38,7 @@ export const createVentureActivitySchema = z
 
 export const updateVentureActivitySchema = z
   .object({
+    activityCode: z.string().trim().min(1).max(10).toUpperCase().optional(),
     name: z.string().trim().min(1).max(160).optional(),
     description: z.string().trim().max(4000).optional().or(z.literal('')),
     termId: objectId.optional(),
