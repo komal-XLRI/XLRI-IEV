@@ -23,6 +23,12 @@
  *   npm run remove:presentation -- --stage V01 --number 1              (preview)
  *   npm run remove:presentation -- --stage V01 --number 1 --confirm    (delete)
  *
+ * Listing a stage also names students it counts as presented who are on no
+ * presentation (completed under the old review flow). To reset those too:
+ *
+ *   npm run remove:presentation -- --stage V01 --reset-unlinked            (preview)
+ *   npm run remove:presentation -- --stage V01 --reset-unlinked --confirm  (reset)
+ *
  * The Google Form's own responses are not touched; delete them in Google
  * Forms if you want those gone too.
  */
@@ -79,7 +85,8 @@ async function main() {
     );
   }
   if (number === null) {
-    console.log('\nPass --number N to choose one.');
+    await reportUnlinked(models, stage._id, process.argv.includes('--reset-unlinked'), confirm);
+    console.log('\nPass --number N to choose a presentation.');
     return;
   }
 
@@ -178,6 +185,92 @@ async function main() {
     `\nDeleted presentation ${number} on ${stage.activityCode}, ${participants.length} student row(s) ` +
       `and ${feedback} feedback response(s); ${toReopen.length} stage(s) no longer completed.`,
   );
+}
+
+/**
+ * Students the stage counts as presented — completed, or with a received date
+ * — who are on no presentation of it: stages completed under the old review
+ * flow, before presentations were recorded. With --reset-unlinked --confirm
+ * they go back to not started, so the stage can be tested from a clean start.
+ */
+async function reportUnlinked(
+  models: typeof import('../src/models'),
+  stageId: mongoose.Types.ObjectId,
+  reset: boolean,
+  confirm: boolean,
+) {
+  const onPresentation = await models.PresentationParticipant.distinct('studentVentureActivityId', {
+    ventureActivityId: stageId,
+  }).exec();
+  const unlinked = await models.StudentVentureActivity.find({
+    ventureActivityId: stageId,
+    _id: { $nin: onPresentation },
+    $or: [{ status: 'COMPLETED' }, { presentationReceivedAt: { $ne: null } }],
+  })
+    .select('_id studentVentureId status completedAt presentationReceivedAt')
+    .lean()
+    .exec();
+  if (unlinked.length === 0) {
+    console.log('\nNo student is counted as presented without a presentation.');
+    return;
+  }
+
+  const ventures = await models.StudentVenture.find({
+    _id: { $in: unlinked.map((r) => r.studentVentureId) },
+  })
+    .select('_id ventureName studentId')
+    .lean()
+    .exec();
+  const users = await models.User.find({ _id: { $in: ventures.map((v) => v.studentId) } })
+    .select('_id name')
+    .lean()
+    .exec();
+  const ventureById = new Map(ventures.map((v) => [v._id.toString(), v]));
+  const nameById = new Map(users.map((u) => [u._id.toString(), u.name]));
+
+  console.log(`\nCounted as presented, but on no presentation (${unlinked.length}):`);
+  for (const r of unlinked) {
+    const venture = ventureById.get(r.studentVentureId.toString());
+    const name = venture?.studentId ? nameById.get(venture.studentId.toString()) : undefined;
+    console.log(
+      `  ${name ?? 'Unknown student'} · ${venture?.ventureName ?? '—'} · ${r.status}` +
+        (r.completedAt ? ` since ${day(r.completedAt)}` : ''),
+    );
+  }
+
+  if (!reset) {
+    console.log('Add --reset-unlinked to preview resetting them to Not started.');
+    return;
+  }
+  const feedback = await models.MentorFeedback.countDocuments({
+    studentVentureActivityId: { $in: unlinked.map((r) => r._id) },
+  }).exec();
+  if (!confirm) {
+    console.log(
+      `Would reset ${unlinked.length} stage(s) to Not started and delete ${feedback} ` +
+        'mentor feedback response(s) on them. Add --confirm to do it.',
+    );
+    return;
+  }
+  await models.MentorFeedback.deleteMany({
+    studentVentureActivityId: { $in: unlinked.map((r) => r._id) },
+  }).exec();
+  await models.StudentVentureActivity.updateMany(
+    { _id: { $in: unlinked.map((r) => r._id) } },
+    {
+      $set: {
+        status: 'NOT_STARTED',
+        completedAt: null,
+        presentationReceivedAt: null,
+        presentationMarkedBy: null,
+      },
+    },
+  ).exec();
+  const { refreshCurrentActivity } = await import('../src/services/ventures/studentVentureService');
+  for (const ventureId of new Set(unlinked.map((r) => r.studentVentureId.toString()))) {
+    await refreshCurrentActivity(ventureId);
+  }
+  console.log(`Reset ${unlinked.length} stage(s) to Not started; deleted ${feedback} response(s).`);
 }
 
 main()
