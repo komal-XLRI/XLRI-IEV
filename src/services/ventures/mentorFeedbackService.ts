@@ -38,6 +38,7 @@ import type { PresentationStatus } from '@/lib/constants/presentations';
 import { formatDate } from '@/lib/utils/dates';
 import { refreshCurrentActivity } from './studentVentureService';
 import { logger } from '@/lib/logger';
+import * as notify from '@/services/notifications/events';
 
 /**
  * Mentor feedback on presentations, through QR codes and Google Forms.
@@ -401,6 +402,7 @@ async function reject(
     tokenPrefix: tokenPrefix(payload.token),
   });
   await logSync({ outcome: 'REJECTED', reason, payload, ...extra });
+  await notify.mentorFeedbackRejected(message);
   return { outcome: 'REJECTED', status, reason, message };
 }
 
@@ -533,6 +535,14 @@ export async function ingestGoogleFormFeedback(
     );
   }
 
+  // A mentor editing their response is not new feedback; only the first one is.
+  if (!previous) {
+    await notify.mentorFeedbackReceived(
+      participant.studentVentureActivityId.toString(),
+      saved!.mentorName ?? null,
+    );
+  }
+
   const stageCompleted = await evaluateParticipantCompletion(participant._id.toString());
 
   const outcome: FeedbackSyncOutcome = previous ? 'UPDATED' : 'ACCEPTED';
@@ -660,6 +670,7 @@ export async function evaluateParticipantCompletion(participantId: string): Prom
 
   await refreshCurrentActivity(participant.studentVentureId.toString());
   logger.info('Stage completed on mentor feedback', { participantId, counted });
+  await notify.stageCompleted(participant.studentVentureActivityId.toString());
   return true;
 }
 

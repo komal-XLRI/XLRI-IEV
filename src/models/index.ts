@@ -50,6 +50,14 @@ export { Workshop, type IWorkshop } from './Workshop';
 export { WorkshopAttendance, type IWorkshopAttendance } from './WorkshopAttendance';
 export { WorkshopFeedback, type IWorkshopFeedback } from './WorkshopFeedback';
 
+export {
+  Notification,
+  NOTIFICATION_TTL_DAYS,
+  type INotification,
+  type NotificationAudience,
+  type NotificationTone,
+} from './Notification';
+
 export { VentureSubmission, type IVentureSubmission } from './VentureSubmission';
 export { Review, type IReview } from './Review';
 export { Evidence, type IEvidence } from './Evidence';

@@ -1,7 +1,11 @@
 import type { ReactNode } from 'react';
 import { Sidebar, SidebarMobile, type SidebarNavItem } from './Sidebar';
 import { Breadcrumbs } from './Breadcrumbs';
-import { NotificationsMenu, type HeaderAlertItem } from './NotificationsMenu';
+import {
+  NotificationsMenu,
+  type BellNotifications,
+  type HeaderAlertItem,
+} from './NotificationsMenu';
 import { UserMenu } from './UserMenu';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { XlriLogo } from '@/components/branding/XlriLogo';
@@ -23,6 +27,8 @@ export function AppShell({
   userName,
   nav,
   alerts = [],
+  notifications,
+  notificationsHref,
   profileHref,
   children,
 }: {
@@ -31,6 +37,10 @@ export function AppShell({
   nav: NavItem[];
   /** Live counts of records needing action; see `getHeaderAlerts`. */
   alerts?: HeaderAlertItem[];
+  /** Stored notifications for this user; see `listNotifications`. */
+  notifications?: BellNotifications;
+  /** The full notifications page, linked from the bell. */
+  notificationsHref?: string;
   profileHref?: string;
   children: ReactNode;
 }) {
@@ -58,7 +68,11 @@ export function AppShell({
             </div>
 
             <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-              <NotificationsMenu alerts={alerts} />
+              <NotificationsMenu
+                alerts={alerts}
+                notifications={notifications}
+                viewAllHref={notificationsHref}
+              />
               <ThemeToggle />
               <span aria-hidden="true" className="bg-border mx-0.5 hidden h-6 w-px sm:block" />
               <UserMenu userName={userName} role={role} profileHref={profileHref} />

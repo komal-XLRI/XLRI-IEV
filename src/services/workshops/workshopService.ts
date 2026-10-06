@@ -12,6 +12,7 @@ import {
 } from '@/lib/constants/workshops';
 import { createWorkshopSchema, type CreateWorkshopInput } from '@/validators/workshops';
 import { startOfTodayUtc } from '@/lib/utils/dates';
+import * as notify from '@/services/notifications/events';
 
 export interface WorkshopFilters {
   q?: string;
@@ -154,9 +155,25 @@ export async function getWorkshop(workshopId: string) {
   return withDefaults(workshop);
 }
 
+/**
+ * Students hear about a workshop when it is published — a draft is nobody's
+ * business yet — and when a published one is cancelled.
+ */
+async function announceStatusChange(
+  previous: WorkshopStatus | null,
+  workshop: { status: WorkshopStatus; title: string; date: Date; startTime: string },
+) {
+  if (previous === workshop.status) return;
+  if (workshop.status === 'PUBLISHED') await notify.workshopPublished(workshop);
+  else if (workshop.status === 'CANCELLED' && previous === 'PUBLISHED') {
+    await notify.workshopCancelled(workshop);
+  }
+}
+
 export async function createWorkshop(input: CreateWorkshopInput) {
   await connectToDatabase();
   const workshop = await Workshop.create(input);
+  await announceStatusChange(null, workshop);
   return workshop.toObject();
 }
 
@@ -216,6 +233,7 @@ export async function updateWorkshop(workshopId: string, patch: Record<string, u
   ).exec();
 
   if (!updated) throw new NotFoundError('Workshop not found');
+  await announceStatusChange(existing.status, updated);
   return updated.toObject();
 }
 
@@ -244,8 +262,10 @@ export async function setWorkshopStatus(workshopId: string, status: WorkshopStat
   const workshop = await Workshop.findById(workshopId).exec();
   if (!workshop) throw new NotFoundError('Workshop not found');
 
+  const previous = workshop.status;
   workshop.status = status;
   await workshop.save();
+  await announceStatusChange(previous, workshop);
 
   return workshop.toObject();
 }

@@ -22,6 +22,7 @@ import type { StudentActivityStatus } from '@/lib/constants/status';
 import type { CreatePresentationInput, UpdatePresentationInput } from '@/validators/presentations';
 import { evaluateParticipantCompletion } from './mentorFeedbackService';
 import { logger } from '@/lib/logger';
+import * as notify from '@/services/notifications/events';
 
 /**
  * Presentation instances within a stage.
@@ -167,6 +168,14 @@ export async function createPresentation(input: CreatePresentationInput, actorUs
     ventureActivityId: input.ventureActivityId,
     students: students.length,
   });
+  // Only a sitting still to come is news to the student; one recorded after
+  // the fact (Held) or already cancelled is not.
+  if (input.status === 'SCHEDULED') {
+    await notify.presentationScheduled(
+      students.map((s) => s.recordId.toString()),
+      { presentedOn: input.presentedOn, startTime: input.startTime },
+    );
+  }
   return { presentationId: presentationId.toString() };
 }
 
@@ -257,6 +266,27 @@ export async function updatePresentation(input: UpdatePresentationInput, actorUs
     removed: toRemove.length,
     status: input.status,
   });
+
+  // Tell the students what changed for them: newly added ones that they are
+  // scheduled; those already on it that it moved or was cancelled.
+  const kept = existing
+    .filter((p) => wanted.has(p.studentVentureActivityId.toString()))
+    .map((p) => p.studentVentureActivityId.toString());
+  const sitting = { presentedOn: input.presentedOn, startTime: input.startTime };
+  if (input.status === 'SCHEDULED') {
+    await notify.presentationScheduled(
+      toAdd.map((s) => s.recordId.toString()),
+      sitting,
+    );
+    const moved =
+      presentation.presentedOn.getTime() !== input.presentedOn.getTime() ||
+      (presentation.startTime ?? null) !== input.startTime;
+    if (moved || presentation.status === 'CANCELLED') {
+      await notify.presentationScheduled(kept, sitting, presentation.status !== 'CANCELLED');
+    }
+  } else if (input.status === 'CANCELLED' && presentation.status !== 'CANCELLED') {
+    await notify.presentationCancelled(kept, input.presentedOn);
+  }
   return { added: toAdd.length, removed: toRemove.length };
 }
 
@@ -340,6 +370,10 @@ export async function setParticipantReceived(
   }
 
   await syncStageRecordReceipt(participant.studentVentureActivityId.toString(), actorUserId);
+  // Before completion is evaluated, so "received" comes ahead of "complete".
+  if (received && !already) {
+    await notify.presentationReceived(participant.studentVentureActivityId.toString());
+  }
 
   // Feedback given before an untick still counts once the tick is back.
   const stageCompleted = received ? await evaluateParticipantCompletion(participantId) : false;

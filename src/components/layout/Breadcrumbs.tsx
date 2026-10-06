@@ -40,6 +40,9 @@ const LABELS: Record<string, string> = {
   venture: 'My venture',
   support: 'Support activities',
   profile: 'Profile',
+  timeline: 'My timeline',
+  notifications: 'Notifications',
+  edit: 'Edit',
 };
 
 const OBJECT_ID = /^[0-9a-f]{24}$/i;

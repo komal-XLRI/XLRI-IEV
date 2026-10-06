@@ -6,6 +6,7 @@ import { NotFoundError } from '@/lib/errors';
 import { averageBehaviourRating, type BehaviourRatings } from '@/lib/constants/behaviour';
 import type { BehaviourFeedbackInput } from '@/validators/ventures';
 import { logger } from '@/lib/logger';
+import * as notify from '@/services/notifications/events';
 
 /** Client-safe HR & behaviour feedback. */
 export interface BehaviourFeedbackView {
@@ -75,6 +76,7 @@ export async function saveBehaviourFeedback(input: BehaviourFeedbackInput, admin
   logger.info(existing ? 'Behaviour feedback updated' : 'Behaviour feedback given', {
     studentVentureActivityId: input.studentVentureActivityId,
   });
+  await notify.behaviourFeedbackGiven(input.studentVentureActivityId, Boolean(existing));
 
   return toView(saved!);
 }
