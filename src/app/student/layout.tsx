@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 const NAV: NavItem[] = [
   { href: '/student', label: 'Dashboard', icon: 'dashboard', exact: true },
+  { href: '/student/timeline', label: 'My timeline', icon: 'timeline', group: 'My programme' },
   { href: '/student/venture', label: 'My venture', icon: 'ventures', group: 'My programme' },
   {
     href: '/student/support',

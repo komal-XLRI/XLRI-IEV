@@ -46,7 +46,7 @@ export default async function StudentSupportPage() {
     <>
       <PageHeader
         title="Support activities"
-        description="The eight activities that feed your venture work. Log your participation here; your reviewers confirm completion."
+        description="The eight activities that feed your venture work. Log your participation here; your faculty, mentor or the programme office confirms completion."
       />
 
       <Card>

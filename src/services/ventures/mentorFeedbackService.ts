@@ -910,6 +910,118 @@ export async function getStudentMentorFeedback(recordId: string) {
   };
 }
 
+export interface StageJourney {
+  presentations: {
+    participantId: string;
+    presentedOn: string;
+    startTime: string | null;
+    status: PresentationStatus;
+    received: boolean;
+  }[];
+  feedback: { counted: number; required: number; complete: boolean; formConfigured: boolean };
+}
+
+/**
+ * Every stage of one venture at a glance — each presentation and the feedback
+ * figures — keyed by stage record id. The same rules as
+ * `getStudentMentorFeedback`, read for all stages in four queries. The caller
+ * has already checked the venture belongs to the student.
+ */
+export async function getStageJourneys(ventureId: string): Promise<Record<string, StageJourney>> {
+  await connectToDatabase();
+  const studentVentureId = new Types.ObjectId(ventureId);
+
+  const [participants, docs] = await Promise.all([
+    PresentationParticipant.find({ studentVentureId })
+      .select('_id presentationId studentVentureActivityId receivedAt')
+      .lean()
+      .exec(),
+    MentorFeedback.find({ studentVentureId, superseded: false })
+      .select('studentVentureActivityId participantId')
+      .lean()
+      .exec(),
+  ]);
+  const presentations = await Presentation.find({
+    _id: { $in: participants.map((p) => p.presentationId) },
+  })
+    .select('_id presentedOn startTime status feedbackForm')
+    .lean()
+    .exec();
+  const presentationById = new Map(presentations.map((p) => [p._id.toString(), p]));
+
+  const countedByParticipant = new Map<string, number>();
+  const countedByRecord = new Map<string, number>();
+  for (const doc of docs) {
+    const record = doc.studentVentureActivityId.toString();
+    countedByRecord.set(record, (countedByRecord.get(record) ?? 0) + 1);
+    if (doc.participantId) {
+      const key = doc.participantId.toString();
+      countedByParticipant.set(key, (countedByParticipant.get(key) ?? 0) + 1);
+    }
+  }
+
+  const rows = participants
+    .flatMap((participant) => {
+      const presentation = presentationById.get(participant.presentationId.toString());
+      if (!presentation) return [];
+      const received = isParticipantReceived(participant, presentation);
+      const required = presentation.feedbackForm?.requiredFeedbackCount ?? 1;
+      return [
+        {
+          recordId: participant.studentVentureActivityId.toString(),
+          participantId: participant._id.toString(),
+          presentedOn: presentation.presentedOn.toISOString(),
+          startTime: presentation.startTime ?? null,
+          status: presentation.status,
+          received,
+          formConfigured: Boolean(presentation.feedbackForm),
+          required,
+          complete:
+            Boolean(presentation.feedbackForm) &&
+            isFeedbackComplete({
+              received,
+              countedResponses: countedByParticipant.get(participant._id.toString()) ?? 0,
+              requiredFeedbackCount: required,
+            }),
+        },
+      ];
+    })
+    .sort((a, b) => a.presentedOn.localeCompare(b.presentedOn));
+
+  const journeys: Record<string, StageJourney> = {};
+  const journeyFor = (recordId: string) =>
+    (journeys[recordId] ??= {
+      presentations: [],
+      feedback: {
+        counted: countedByRecord.get(recordId) ?? 0,
+        required: 1,
+        complete: false,
+        formConfigured: false,
+      },
+    });
+
+  for (const row of rows) {
+    const journey = journeyFor(row.recordId);
+    journey.presentations.push({
+      participantId: row.participantId,
+      presentedOn: row.presentedOn,
+      startTime: row.startTime,
+      status: row.status,
+      received: row.received,
+    });
+    // Rows are in date order, so the last form seen is the latest one — the
+    // headline required count follows it, as on the stage page.
+    if (row.formConfigured) {
+      journey.feedback.formConfigured = true;
+      journey.feedback.required = row.required;
+    }
+    if (row.complete) journey.feedback.complete = true;
+  }
+  for (const recordId of countedByRecord.keys()) journeyFor(recordId);
+
+  return journeys;
+}
+
 /** Per-stage feedback figures for the activity list, keyed by activity id. */
 export async function getFeedbackTallies(): Promise<
   Record<string, { received: number; complete: number; configured: boolean }>

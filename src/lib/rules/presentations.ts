@@ -10,24 +10,29 @@ import type { StudentActivityStatus } from '@/lib/constants/status';
  * those presentations has been given — receiving them is not the end of it.
  */
 
-/** Statuses a received presentation moves a record out of. */
-const BEFORE_PRESENTATION: ReadonlySet<StudentActivityStatus> = new Set([
-  'NOT_STARTED',
-  'IN_PROGRESS',
+/**
+ * Statuses of the retired submit-and-review flow. Nothing produces them any
+ * more; a record still carrying one is read as "not presented yet".
+ */
+export const RETIRED_REVIEW_STATUSES: ReadonlySet<StudentActivityStatus> = new Set([
+  'UNDER_REVIEW',
+  'REVISION_REQUIRED',
 ]);
 
 /**
- * The status a record takes when its presentation is marked received. Records
- * further along — completed, or mid-review under the retired submission flow —
- * keep the status they have.
+ * The status a record takes when its presentation is marked received. Only a
+ * COMPLETED record keeps its status; everything else — including a leftover
+ * status from the retired review flow — becomes PRESENTATION_RECEIVED.
  */
 export function statusOnPresentationReceived(status: StudentActivityStatus): StudentActivityStatus {
-  return BEFORE_PRESENTATION.has(status) ? 'PRESENTATION_RECEIVED' : status;
+  return status === 'COMPLETED' ? status : 'PRESENTATION_RECEIVED';
 }
 
 /** The status a record returns to when a received mark is withdrawn. */
 export function statusOnPresentationCleared(status: StudentActivityStatus): StudentActivityStatus {
-  return status === 'PRESENTATION_RECEIVED' ? 'NOT_STARTED' : status;
+  return status === 'PRESENTATION_RECEIVED' || RETIRED_REVIEW_STATUSES.has(status)
+    ? 'NOT_STARTED'
+    : status;
 }
 
 export type PresentationStageState =

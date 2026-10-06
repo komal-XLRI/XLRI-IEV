@@ -7,8 +7,6 @@ import {
   CalendarRange,
   CheckCircle2,
   Clock,
-  ExternalLink,
-  FolderOpen,
   HeartHandshake,
   MessagesSquare,
   Presentation,
@@ -20,17 +18,14 @@ import { Card, CardBody, CardHeader, EmptyState, StatTile } from '@/components/u
 import { ActivityStatusBadge, Badge } from '@/components/ui/Badge';
 import { MeterBar } from '@/components/ui/Chart';
 import { getActivityContext, getVentureProgress } from '@/services/ventures/studentVentureService';
-import { getSubmissionHistory } from '@/services/submissions/submissionService';
 import { getSupportActivitiesForVentureActivity } from '@/services/ventures/ventureActivityService';
 import { toTimelineRow } from '@/services/ventures/timeline';
-import { SubmissionHistory } from '@/components/venture/SubmissionHistory';
 import { BehaviourFeedbackCard } from '@/components/venture/BehaviourFeedbackCard';
 import { getBehaviourFeedbackForRecord } from '@/services/ventures/behaviourService';
 import { getStudentMentorFeedback } from '@/services/ventures/mentorFeedbackService';
 import { MentorFeedbackEntries } from '@/components/venture/MentorFeedbackEntries';
 import { durationInDays, formatDate, formatDateRange, windowState } from '@/lib/utils/dates';
 import { isValidObjectId } from '@/lib/utils/ids';
-import { serialize } from '@/lib/utils/serialize';
 
 export const metadata: Metadata = { title: 'Activity' };
 export const dynamic = 'force-dynamic';
@@ -53,10 +48,7 @@ export default async function StudentActivityPage({ params }: { params: Promise<
 
   // Ownership was checked above; `id` is this student's own record, so the
   // feedback read below can only ever be theirs.
-  const [history, supports, behaviour, mentorFeedback] = await Promise.all([
-    // Work submitted under the retired in-app flow. Shown when it exists so
-    // nothing a student handed in, or any comment on it, disappears.
-    getSubmissionHistory(id),
+  const [supports, behaviour, mentorFeedback] = await Promise.all([
     getSupportActivitiesForVentureActivity(context.activity._id.toString()),
     getBehaviourFeedbackForRecord(id),
     getStudentMentorFeedback(id),
@@ -93,7 +85,7 @@ export default async function StudentActivityPage({ params }: { params: Promise<
         }
         action={
           <Link
-            href="/student"
+            href="/student/timeline"
             className="text-primary inline-flex items-center gap-1.5 text-[13px] font-medium hover:underline"
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" />
@@ -103,11 +95,11 @@ export default async function StudentActivityPage({ params }: { params: Promise<
       />
 
       {/* What this stage asks of the student, stated once at the top: present,
-          put the deck in the shared folder, then wait for feedback. */}
+          then wait for feedback. */}
       <Card className="mb-5">
         <CardHeader
           title="Your presentation"
-          description="Present your work for this stage and put your deck in the presentation's Drive folder. The stage completes once you have been given feedback on a presentation."
+          description="Present your work for this stage. The stage completes once you have been given feedback on a presentation."
           icon={Presentation}
           action={<ActivityStatusBadge state={row.uiState} />}
         />
@@ -138,7 +130,7 @@ export default async function StudentActivityPage({ params }: { params: Promise<
               ) : (
                 <>
                   <span className="text-foreground font-medium">Not received yet.</span> Your
-                  programme office marks it received once your presentation is in the folder.
+                  programme office marks it received once you have presented.
                 </>
               )}
             </span>
@@ -181,37 +173,12 @@ export default async function StudentActivityPage({ params }: { params: Promise<
                           ? 'Scheduled'
                           : 'Not received'}
                   </Badge>
-                  {presentation.driveUrl ? (
-                    <a
-                      href={presentation.driveUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary inline-flex items-center gap-1 text-[13px] font-medium hover:underline"
-                    >
-                      <FolderOpen className="size-3.5" aria-hidden="true" />
-                      Open Drive folder
-                      <ExternalLink className="size-3" aria-hidden="true" />
-                    </a>
-                  ) : (
-                    <span className="type-caption">Drive link not shared yet</span>
-                  )}
                 </li>
               ))}
             </ul>
-          ) : row.presentationFolderUrl ? (
-            <a
-              href={row.presentationFolderUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-            >
-              <FolderOpen className="size-4" aria-hidden="true" />
-              Open presentation folder
-              <ExternalLink className="size-3.5" aria-hidden="true" />
-            </a>
           ) : (
             <p className="type-caption">
-              Your presentation date and Drive link will appear here once it is scheduled.
+              Your presentation date will appear here once it is scheduled.
             </p>
           )}
         </CardBody>
@@ -248,7 +215,7 @@ export default async function StudentActivityPage({ params }: { params: Promise<
               ? formatDate(row.presentationReceivedAt)
               : presented
                 ? undefined
-                : 'Not in the folder yet'
+                : 'Not received yet'
           }
           tone={presented ? 'positive' : 'neutral'}
         />
@@ -373,15 +340,6 @@ export default async function StudentActivityPage({ params }: { params: Promise<
           )}
         </Card>
       </div>
-
-      {history.length > 0 ? (
-        <div className="mt-5">
-          <SubmissionHistory
-            entries={serialize(history)}
-            emptyMessage="Nothing was submitted for this activity."
-          />
-        </div>
-      ) : null}
     </>
   );
 }

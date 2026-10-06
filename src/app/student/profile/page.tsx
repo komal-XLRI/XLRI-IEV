@@ -46,8 +46,8 @@ export default async function StudentProfilePage() {
 
         <Card>
           <CardHeader
-            title="Your reviewers"
-            description="Both approvals are required to complete an activity."
+            title="Your venture team"
+            description="Your venture and the faculty and mentor assigned to it."
           />
           <CardBody className="space-y-3 text-sm">
             <Row

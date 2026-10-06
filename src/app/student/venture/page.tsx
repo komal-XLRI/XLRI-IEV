@@ -31,7 +31,7 @@ export default async function StudentVenturePage() {
     <>
       <PageHeader
         title="My venture"
-        description="Keep your venture narrative current — your reviewers see this alongside every submission."
+        description="Keep your venture narrative current — your faculty, mentor and the programme office see it alongside your presentations."
       />
       <MyVentureForm
         venture={serialize({

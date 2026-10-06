@@ -119,8 +119,6 @@ interface MyProgressRow {
   activityCode: string;
   activityName: string;
   status: string;
-  facultyVerdict: string;
-  mentorVerdict: string;
   presentationReceivedAt: Date | null;
   startDate: Date;
   endDate: Date;
@@ -138,18 +136,6 @@ export const myProgressDataset = defineDataset<MyProgressRow>({
     { key: 'activityCode', header: 'Code', value: (r) => r.activityCode, width: 7 },
     { key: 'activityName', header: 'Activity', value: (r) => r.activityName, width: 30 },
     { key: 'status', header: 'Status', value: (r) => humanise(r.status), width: 18 },
-    {
-      key: 'facultyVerdict',
-      header: 'Faculty review',
-      value: (r) => humanise(r.facultyVerdict),
-      width: 15,
-    },
-    {
-      key: 'mentorVerdict',
-      header: 'Mentor review',
-      value: (r) => humanise(r.mentorVerdict),
-      width: 15,
-    },
     {
       key: 'presentationReceivedAt',
       header: 'Presentation received',
@@ -185,8 +171,6 @@ export const myProgressDataset = defineDataset<MyProgressRow>({
       activityCode: entry.activity.activityCode,
       activityName: entry.activity.name,
       status: entry.uiState,
-      facultyVerdict: entry.record.facultyReviewStatus,
-      mentorVerdict: entry.record.mentorReviewStatus,
       presentationReceivedAt: entry.record.presentationReceivedAt ?? null,
       startDate: entry.activity.startDate,
       endDate: entry.activity.endDate,

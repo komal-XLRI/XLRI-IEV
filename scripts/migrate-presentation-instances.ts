@@ -18,6 +18,10 @@
  *     printed keeps working;
  *   - their mentor feedback is attached to that presentation.
  *
+ * Stages still showing a status from the retired submit-and-review flow
+ * ("Under review", "Revision required") are moved to "Presentation received"
+ * if their presentation is in, or back to "Not started" if not.
+ *
  * The mentor feedback form now belongs to each presentation, not the stage. A
  * stage that still has a stage-level form has it copied onto each of its
  * existing presentations that has none — so QR codes already in use keep
@@ -203,6 +207,28 @@ async function main() {
       ).exec();
       feedbackAttached += attached.modifiedCount;
     }
+  }
+
+  // Leftover statuses of the retired submit-and-review flow. A record whose
+  // presentation is in becomes PRESENTATION_RECEIVED; one without goes back to
+  // NOT_STARTED. COMPLETED is never touched, and the old reviews stay stored.
+  const retired = ['UNDER_REVIEW', 'REVISION_REQUIRED', 'IN_PROGRESS'];
+  const toReceived = {
+    status: { $in: retired },
+    presentationReceivedAt: { $ne: null },
+  };
+  const toNotStarted = {
+    status: { $in: ['UNDER_REVIEW', 'REVISION_REQUIRED'] },
+    presentationReceivedAt: null,
+  };
+  const staleReceived = await records.countDocuments(toReceived);
+  const staleOther = await records.countDocuments(toNotStarted);
+  console.log(
+    `  Old review statuses: ${staleReceived} → Presentation received, ${staleOther} → Not started.`,
+  );
+  if (!dry) {
+    await records.updateMany(toReceived, { $set: { status: 'PRESENTATION_RECEIVED' } });
+    await records.updateMany(toNotStarted, { $set: { status: 'NOT_STARTED' } });
   }
 
   // Stage-level feedback forms → each existing presentation of that stage.
