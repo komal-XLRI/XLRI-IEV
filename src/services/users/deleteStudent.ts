@@ -5,6 +5,7 @@ import {
   BehaviourFeedback,
   Evidence,
   MentorFeedback,
+  Notification,
   PresentationParticipant,
   Review,
   StudentProfile,
@@ -136,6 +137,8 @@ export async function deleteStudent(userId: string, confirmEmail: string): Promi
       { studentVentureId: { $in: ventureIds } },
       opts,
     ).exec();
+    await Notification.deleteMany({ audience: 'USER', recipientId: userId }, opts).exec();
+    await Notification.updateMany({ readBy: userId }, { $pull: { readBy: userId } }, opts).exec();
     await StudentProfile.deleteMany({ userId }, opts).exec();
     await User.deleteOne({ _id: userId }, opts).exec();
 

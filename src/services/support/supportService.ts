@@ -1,8 +1,9 @@
 import 'server-only';
 import { connectToDatabase } from '@/lib/db/mongoose';
-import { StudentSupportActivity, StudentVenture, SupportActivity } from '@/models';
+import { StudentSupportActivity, StudentVenture, SupportActivity, User } from '@/models';
 import { ForbiddenError, NotFoundError } from '@/lib/errors';
 import type { SupportActivityStatus } from '@/lib/constants/status';
+import * as notify from '@/services/notifications/events';
 
 /**
  * Support activity records are deliberately lightweight — several of the eight
@@ -71,6 +72,23 @@ export async function updateStudentSupportActivity(
   )
     .lean()
     .exec();
+
+  // A student's own update is what the programme office needs to confirm.
+  if (isOwner && !isAdmin) {
+    const [activity, student] = await Promise.all([
+      SupportActivity.findById(record.supportActivityId).select('activityCode name').lean().exec(),
+      User.findById(venture.studentId).select('name').lean().exec(),
+    ]);
+    if (activity) {
+      await notify.supportActivityLogged({
+        studentId: venture.studentId.toString(),
+        studentName: student?.name ?? 'A student',
+        activityCode: activity.activityCode,
+        activityName: activity.name,
+        status: input.status,
+      });
+    }
+  }
 
   return updated!;
 }

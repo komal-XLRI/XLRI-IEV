@@ -229,10 +229,16 @@ export function VentureActivityCard({ activity }: { activity: VentureActivityVie
           Attendance
         </Link>
         <Link
+          href={`/admin/venture-activities/${activity.id}/edit`}
+          className="text-primary text-[13px] font-medium hover:underline"
+        >
+          Edit
+        </Link>
+        <Link
           href={`/admin/venture-activities/${activity.id}`}
           className="text-primary text-[13px] font-medium hover:underline"
         >
-          Presentations &amp; settings
+          Presentations
         </Link>
       </footer>
     </article>

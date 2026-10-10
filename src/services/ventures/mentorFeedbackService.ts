@@ -38,6 +38,7 @@ import type { PresentationStatus } from '@/lib/constants/presentations';
 import { formatDate } from '@/lib/utils/dates';
 import { refreshCurrentActivity } from './studentVentureService';
 import { logger } from '@/lib/logger';
+import * as notify from '@/services/notifications/events';
 
 /**
  * Mentor feedback on presentations, through QR codes and Google Forms.
@@ -401,6 +402,7 @@ async function reject(
     tokenPrefix: tokenPrefix(payload.token),
   });
   await logSync({ outcome: 'REJECTED', reason, payload, ...extra });
+  await notify.mentorFeedbackRejected(message);
   return { outcome: 'REJECTED', status, reason, message };
 }
 
@@ -533,6 +535,14 @@ export async function ingestGoogleFormFeedback(
     );
   }
 
+  // A mentor editing their response is not new feedback; only the first one is.
+  if (!previous) {
+    await notify.mentorFeedbackReceived(
+      participant.studentVentureActivityId.toString(),
+      saved!.mentorName ?? null,
+    );
+  }
+
   const stageCompleted = await evaluateParticipantCompletion(participant._id.toString());
 
   const outcome: FeedbackSyncOutcome = previous ? 'UPDATED' : 'ACCEPTED';
@@ -660,6 +670,7 @@ export async function evaluateParticipantCompletion(participantId: string): Prom
 
   await refreshCurrentActivity(participant.studentVentureId.toString());
   logger.info('Stage completed on mentor feedback', { participantId, counted });
+  await notify.stageCompleted(participant.studentVentureActivityId.toString());
   return true;
 }
 
@@ -908,6 +919,118 @@ export async function getStudentMentorFeedback(recordId: string) {
     /** Feedback given before presentations were recorded one by one. */
     earlierEntries: earlier,
   };
+}
+
+export interface StageJourney {
+  presentations: {
+    participantId: string;
+    presentedOn: string;
+    startTime: string | null;
+    status: PresentationStatus;
+    received: boolean;
+  }[];
+  feedback: { counted: number; required: number; complete: boolean; formConfigured: boolean };
+}
+
+/**
+ * Every stage of one venture at a glance — each presentation and the feedback
+ * figures — keyed by stage record id. The same rules as
+ * `getStudentMentorFeedback`, read for all stages in four queries. The caller
+ * has already checked the venture belongs to the student.
+ */
+export async function getStageJourneys(ventureId: string): Promise<Record<string, StageJourney>> {
+  await connectToDatabase();
+  const studentVentureId = new Types.ObjectId(ventureId);
+
+  const [participants, docs] = await Promise.all([
+    PresentationParticipant.find({ studentVentureId })
+      .select('_id presentationId studentVentureActivityId receivedAt')
+      .lean()
+      .exec(),
+    MentorFeedback.find({ studentVentureId, superseded: false })
+      .select('studentVentureActivityId participantId')
+      .lean()
+      .exec(),
+  ]);
+  const presentations = await Presentation.find({
+    _id: { $in: participants.map((p) => p.presentationId) },
+  })
+    .select('_id presentedOn startTime status feedbackForm')
+    .lean()
+    .exec();
+  const presentationById = new Map(presentations.map((p) => [p._id.toString(), p]));
+
+  const countedByParticipant = new Map<string, number>();
+  const countedByRecord = new Map<string, number>();
+  for (const doc of docs) {
+    const record = doc.studentVentureActivityId.toString();
+    countedByRecord.set(record, (countedByRecord.get(record) ?? 0) + 1);
+    if (doc.participantId) {
+      const key = doc.participantId.toString();
+      countedByParticipant.set(key, (countedByParticipant.get(key) ?? 0) + 1);
+    }
+  }
+
+  const rows = participants
+    .flatMap((participant) => {
+      const presentation = presentationById.get(participant.presentationId.toString());
+      if (!presentation) return [];
+      const received = isParticipantReceived(participant, presentation);
+      const required = presentation.feedbackForm?.requiredFeedbackCount ?? 1;
+      return [
+        {
+          recordId: participant.studentVentureActivityId.toString(),
+          participantId: participant._id.toString(),
+          presentedOn: presentation.presentedOn.toISOString(),
+          startTime: presentation.startTime ?? null,
+          status: presentation.status,
+          received,
+          formConfigured: Boolean(presentation.feedbackForm),
+          required,
+          complete:
+            Boolean(presentation.feedbackForm) &&
+            isFeedbackComplete({
+              received,
+              countedResponses: countedByParticipant.get(participant._id.toString()) ?? 0,
+              requiredFeedbackCount: required,
+            }),
+        },
+      ];
+    })
+    .sort((a, b) => a.presentedOn.localeCompare(b.presentedOn));
+
+  const journeys: Record<string, StageJourney> = {};
+  const journeyFor = (recordId: string) =>
+    (journeys[recordId] ??= {
+      presentations: [],
+      feedback: {
+        counted: countedByRecord.get(recordId) ?? 0,
+        required: 1,
+        complete: false,
+        formConfigured: false,
+      },
+    });
+
+  for (const row of rows) {
+    const journey = journeyFor(row.recordId);
+    journey.presentations.push({
+      participantId: row.participantId,
+      presentedOn: row.presentedOn,
+      startTime: row.startTime,
+      status: row.status,
+      received: row.received,
+    });
+    // Rows are in date order, so the last form seen is the latest one — the
+    // headline required count follows it, as on the stage page.
+    if (row.formConfigured) {
+      journey.feedback.formConfigured = true;
+      journey.feedback.required = row.required;
+    }
+    if (row.complete) journey.feedback.complete = true;
+  }
+  for (const recordId of countedByRecord.keys()) journeyFor(recordId);
+
+  return journeys;
 }
 
 /** Per-stage feedback figures for the activity list, keyed by activity id. */

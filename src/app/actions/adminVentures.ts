@@ -99,6 +99,7 @@ export async function updateVentureActivityAction(
     const activityId = objectId.parse(value(formData, 'activityId'));
 
     const input = updateVentureActivitySchema.parse({
+      activityCode: value(formData, 'activityCode'),
       name: value(formData, 'name'),
       description: value(formData, 'description'),
       termId: value(formData, 'termId'),
@@ -112,6 +113,7 @@ export async function updateVentureActivityAction(
 
     revalidatePath('/admin/venture-activities');
     revalidatePath(`/admin/venture-activities/${activityId}`);
+    revalidatePath(`/admin/venture-activities/${activityId}/edit`);
     return serialize(activity);
   });
 }
@@ -352,6 +354,7 @@ export async function setSupportMappingsAction(
 
     revalidatePath('/admin/venture-activities');
     revalidatePath(`/admin/venture-activities/${input.ventureActivityId}`);
+    revalidatePath(`/admin/venture-activities/${input.ventureActivityId}/edit`);
     revalidatePath('/admin/support-activities');
     return serialize(result);
   });

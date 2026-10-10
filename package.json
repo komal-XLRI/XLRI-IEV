@@ -20,6 +20,8 @@
     "migrate:attendance": "tsx --tsconfig tsconfig.scripts.json scripts/migrate-venture-attendance.ts",
     "migrate:attempts": "tsx --tsconfig tsconfig.scripts.json scripts/migrate-remove-attempts.ts",
     "migrate:presentations": "tsx --tsconfig tsconfig.scripts.json scripts/migrate-presentation-instances.ts",
+    "remove:orphan-venture": "tsx --tsconfig tsconfig.scripts.json scripts/remove-orphan-venture.ts",
+    "remove:presentation": "tsx --tsconfig tsconfig.scripts.json scripts/remove-test-presentation.ts",
     "verify": "npm run typecheck && npm run lint && npm run test",
     "check:smtp": "tsx --tsconfig tsconfig.scripts.json scripts/check-smtp.ts"
   },

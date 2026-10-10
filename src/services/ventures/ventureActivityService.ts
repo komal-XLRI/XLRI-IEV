@@ -84,6 +84,18 @@ export async function updateVentureActivity(activityId: string, input: UpdateVen
     if (clash) throw new ConflictError(`Another activity already uses order ${input.order}`);
   }
 
+  if (input.activityCode !== undefined && input.activityCode !== activity.activityCode) {
+    const clash = await VentureActivity.findOne({
+      activityCode: input.activityCode,
+      _id: { $ne: activityId },
+    })
+      .select('_id')
+      .lean()
+      .exec();
+    if (clash) throw new ConflictError(`Activity code ${input.activityCode} already exists`);
+    activity.activityCode = input.activityCode;
+  }
+
   if (input.termId) {
     const term = await Term.findById(input.termId).select('_id').lean().exec();
     if (!term) throw new NotFoundError('Term not found');

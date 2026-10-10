@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth/currentUser';
 import { AppShell, type NavItem } from '@/components/layout/AppShell';
 import { getHeaderAlerts } from '@/services/dashboard/dashboardService';
+import { listNotifications } from '@/services/notifications/notificationService';
 import { ROLE_HOME } from '@/lib/constants/roles';
 
 export const dynamic = 'force-dynamic';
@@ -64,10 +65,20 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   if (!user) redirect('/login?next=/admin');
   if (user.role !== 'ADMIN') redirect(ROLE_HOME[user.role]);
 
-  const alerts = await getHeaderAlerts({ userId: user.userId, role: user.role });
+  const [alerts, notifications] = await Promise.all([
+    getHeaderAlerts({ userId: user.userId, role: user.role }),
+    listNotifications(user, 10),
+  ]);
 
   return (
-    <AppShell role="ADMIN" userName={user.name} nav={NAV} alerts={alerts}>
+    <AppShell
+      role="ADMIN"
+      userName={user.name}
+      nav={NAV}
+      alerts={alerts}
+      notifications={notifications}
+      notificationsHref="/admin/notifications"
+    >
       {children}
     </AppShell>
   );

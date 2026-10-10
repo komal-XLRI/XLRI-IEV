@@ -61,13 +61,19 @@ export function EditVentureActivity({
                 <input type="hidden" name="activityId" value={activity._id} />
 
                 <div className="grid gap-4 sm:grid-cols-3">
-                  <Field label="Code" htmlFor="activityCode">
+                  <Field
+                    label="Code"
+                    htmlFor="activityCode"
+                    required
+                    error={fieldErrors?.activityCode}
+                  >
                     <TextInput
                       id="activityCode"
-                      value={activity.activityCode}
-                      readOnly
-                      disabled
-                      className="font-mono"
+                      name="activityCode"
+                      required
+                      maxLength={10}
+                      defaultValue={activity.activityCode}
+                      className="font-mono uppercase"
                     />
                   </Field>
                   <Field label="Order" htmlFor="order" required error={fieldErrors?.order}>

@@ -19,15 +19,17 @@ describe('marking a presentation received', () => {
     expect(statusOnPresentationReceived('COMPLETED')).toBe('COMPLETED');
   });
 
-  it('leaves a record mid-review under the old flow where it is', () => {
-    expect(statusOnPresentationReceived('UNDER_REVIEW')).toBe('UNDER_REVIEW');
-    expect(statusOnPresentationReceived('REVISION_REQUIRED')).toBe('REVISION_REQUIRED');
+  it('replaces a leftover status from the retired review flow', () => {
+    expect(statusOnPresentationReceived('UNDER_REVIEW')).toBe('PRESENTATION_RECEIVED');
+    expect(statusOnPresentationReceived('REVISION_REQUIRED')).toBe('PRESENTATION_RECEIVED');
   });
 
-  it('returns a withdrawn mark to NOT_STARTED, and nothing else', () => {
+  it('returns a withdrawn mark to NOT_STARTED, but never takes back COMPLETED', () => {
     expect(statusOnPresentationCleared('PRESENTATION_RECEIVED')).toBe('NOT_STARTED');
+    expect(statusOnPresentationCleared('UNDER_REVIEW')).toBe('NOT_STARTED');
+    expect(statusOnPresentationCleared('REVISION_REQUIRED')).toBe('NOT_STARTED');
     expect(statusOnPresentationCleared('COMPLETED')).toBe('COMPLETED');
-    expect(statusOnPresentationCleared('UNDER_REVIEW')).toBe('UNDER_REVIEW');
+    expect(statusOnPresentationCleared('IN_PROGRESS')).toBe('IN_PROGRESS');
   });
 });
 

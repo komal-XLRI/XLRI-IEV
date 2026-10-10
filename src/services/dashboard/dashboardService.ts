@@ -1,6 +1,14 @@
 import 'server-only';
 import { connectToDatabase } from '@/lib/db/mongoose';
-import { StudentVenture, StudentVentureActivity, User, VentureActivity } from '@/models';
+import { Types } from 'mongoose';
+import {
+  Presentation,
+  PresentationParticipant,
+  StudentVentureActivity,
+  User,
+  VentureActivity,
+} from '@/models';
+import { startOfTodayUtc } from '@/lib/utils/dates';
 import type { ReviewStatus, ReviewerType } from '@/lib/constants/status';
 
 export interface PendingReviewerRow {
@@ -72,13 +80,12 @@ export interface HeaderAlert {
 /**
  * What the signed-in user needs to act on, for the header bell.
  *
- * Deliberately derived from the records that already exist rather than backed
- * by a notifications collection: there is nothing to write, nothing to mark as
- * read, and nothing that can drift out of step with the underlying state. Each
- * entry is a count plus the link that resolves it.
+ * These are live, not stored: each one is worked out from the records as they
+ * are now, so it disappears by itself once dealt with. Things that *happened*
+ * — feedback in, a stage completed — are stored notifications instead (see
+ * notificationService); this is only what still needs doing.
  *
- * Kept to counted queries on already-indexed fields, because this runs on every
- * page render for every role.
+ * Kept to a few small queries, because this runs on every page render.
  */
 export async function getHeaderAlerts(user: {
   userId: string;
@@ -87,29 +94,58 @@ export async function getHeaderAlerts(user: {
   await connectToDatabase();
 
   const alerts: HeaderAlert[] = [];
+  const today = startOfTodayUtc();
 
   if (user.role === 'ADMIN') {
-    const [awaitingReview, unassigned] = await Promise.all([
-      StudentVentureActivity.countDocuments({ status: 'UNDER_REVIEW' }).exec(),
-      StudentVenture.countDocuments({ $or: [{ facultyId: null }, { mentorId: null }] }).exec(),
+    const [todays, withoutForm] = await Promise.all([
+      Presentation.find({ presentedOn: today, status: 'SCHEDULED' })
+        .select('ventureActivityId')
+        .lean()
+        .exec(),
+      Presentation.find({ status: { $ne: 'CANCELLED' }, feedbackForm: null })
+        .select('_id ventureActivityId')
+        .lean()
+        .exec(),
     ]);
 
-    if (awaitingReview > 0) {
+    if (todays.length > 0) {
+      const stages = new Set(todays.map((p) => p.ventureActivityId.toString()));
       alerts.push({
-        id: 'awaiting-review',
-        title: `${awaitingReview} attempt${awaitingReview === 1 ? '' : 's'} awaiting review`,
-        detail: 'Both a faculty and a mentor verdict are required to complete an activity.',
-        href: '/admin/reviews',
+        id: 'presentations-today',
+        title: `${todays.length} presentation${todays.length === 1 ? '' : 's'} today`,
+        detail: 'Mark each student received once they have presented, so their QR code works.',
+        href:
+          stages.size === 1
+            ? `/admin/venture-activities/${[...stages][0]}`
+            : '/admin/venture-activities',
         tone: 'info',
       });
     }
 
-    if (unassigned > 0) {
+    // A received student's QR code leads nowhere until their presentation has
+    // a feedback form — mentors scanning it are turned away.
+    const blocked = withoutForm.length
+      ? await PresentationParticipant.distinct('presentationId', {
+          presentationId: { $in: withoutForm.map((p) => p._id) },
+          receivedAt: { $ne: null },
+        }).exec()
+      : [];
+    if (blocked.length > 0) {
+      const blockedIds = new Set(blocked.map((id) => id.toString()));
+      const stages = new Set(
+        withoutForm
+          .filter((p) => blockedIds.has(p._id.toString()))
+          .map((p) => p.ventureActivityId.toString()),
+      );
       alerts.push({
-        id: 'unassigned',
-        title: `${unassigned} venture${unassigned === 1 ? '' : 's'} without a full review pair`,
-        detail: 'A venture cannot be reviewed until both a faculty and a mentor are assigned.',
-        href: '/admin/ventures',
+        id: 'presentations-without-form',
+        title: `${blocked.length} presentation${blocked.length === 1 ? '' : 's'} without a feedback form`,
+        detail:
+          'Students are marked received, but mentors cannot give feedback until a form is set up.',
+        href:
+          stages.size === 1
+            ? `/admin/venture-activities/${[...stages][0]}`
+            : '/admin/venture-activities',
         tone: 'warning',
       });
     }
@@ -140,8 +176,43 @@ export async function getHeaderAlerts(user: {
       : [];
   }
 
-  // Students no longer submit work in the app — presentations are collected
-  // by the programme office — so there is nothing a student must act on here.
+  // A student's one deadline: a presentation today or tomorrow.
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+  const mine = await PresentationParticipant.find({
+    studentId: new Types.ObjectId(user.userId),
+    receivedAt: null,
+  })
+    .select('presentationId studentVentureActivityId')
+    .lean()
+    .exec();
+  if (mine.length > 0) {
+    const soon = await Presentation.find({
+      _id: { $in: mine.map((p) => p.presentationId) },
+      status: 'SCHEDULED',
+      presentedOn: { $in: [today, tomorrow] },
+    })
+      .select('_id presentedOn startTime ventureActivityId')
+      .sort({ presentedOn: 1, startTime: 1 })
+      .lean()
+      .exec();
+    for (const presentation of soon) {
+      const participant = mine.find((p) => p.presentationId.equals(presentation._id))!;
+      const stage = await VentureActivity.findById(presentation.ventureActivityId)
+        .select('activityCode name')
+        .lean()
+        .exec();
+      const isToday = presentation.presentedOn.getTime() === today.getTime();
+      alerts.push({
+        id: `presentation-${presentation._id.toString()}`,
+        title: `Your presentation is ${isToday ? 'today' : 'tomorrow'}${
+          presentation.startTime ? ` at ${presentation.startTime}` : ''
+        }`,
+        detail: stage ? `${stage.activityCode} · ${stage.name}` : 'See your timeline for details.',
+        href: `/student/activities/${participant.studentVentureActivityId.toString()}`,
+        tone: isToday ? 'warning' : 'info',
+      });
+    }
+  }
   return alerts;
 }
 

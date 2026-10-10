@@ -1,48 +1,26 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { Pencil } from 'lucide-react';
 import { PageHeader } from '@/components/layout/AppShell';
-import {
-  getSupportActivitiesForVentureActivity,
-  getVentureActivity,
-  listSupportActivities,
-} from '@/services/ventures/ventureActivityService';
+import { getVentureActivity } from '@/services/ventures/ventureActivityService';
 import { listStagePresentations, listStageStudents } from '@/services/ventures/presentationService';
 import { listBehaviourForActivity } from '@/services/ventures/behaviourService';
 import { BehaviourPanel } from '@/components/admin/BehaviourPanel';
 import { getStageFeedback } from '@/services/ventures/mentorFeedbackService';
 import { AutoRefresh } from '@/components/layout/AutoRefresh';
-import { listTerms } from '@/services/academic/academicService';
-import { EditVentureActivity } from '@/components/admin/EditVentureActivity';
 import { PresentationsPanel } from '@/components/admin/PresentationsPanel';
-import { serialize } from '@/lib/utils/serialize';
 import { isValidObjectId } from '@/lib/utils/ids';
 
-export const metadata: Metadata = { title: 'Edit venture activity' };
+export const metadata: Metadata = { title: 'Venture activity' };
 export const dynamic = 'force-dynamic';
 
-export default async function EditVentureActivityPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function VentureActivityPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!isValidObjectId(id)) notFound();
 
-  const [
-    activity,
-    terms,
-    allSupports,
-    mappedSupports,
-    students,
-    presentations,
-    behaviour,
-    feedback,
-  ] = await Promise.all([
+  const [activity, students, presentations, behaviour, feedback] = await Promise.all([
     getVentureActivity(id),
-    listTerms(),
-    listSupportActivities(),
-    getSupportActivitiesForVentureActivity(id),
     listStageStudents(id),
     listStagePresentations(id),
     listBehaviourForActivity(id),
@@ -53,7 +31,7 @@ export default async function EditVentureActivityPage({
     <>
       <PageHeader
         title={`${activity.activityCode} · ${activity.name}`}
-        description="Student presentations, mentor feedback, HR & behaviour feedback, dates and the support activities that feed this stage."
+        description="Student presentations, mentor feedback and HR & behaviour feedback for this stage."
         action={
           <span className="flex flex-wrap items-center gap-3">
             {/* Attendance moved to its own register; this is the same activity,
@@ -66,6 +44,13 @@ export default async function EditVentureActivityPage({
             </Link>
             <Link href="/admin/venture-activities" className="text-primary text-sm hover:underline">
               Back to list
+            </Link>
+            <Link
+              href={`/admin/venture-activities/${id}/edit`}
+              className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors"
+            >
+              <Pencil className="size-3.5" aria-hidden="true" />
+              Edit stage
             </Link>
           </span>
         }
@@ -87,32 +72,6 @@ export default async function EditVentureActivityPage({
       <AutoRefresh />
 
       <BehaviourPanel rows={behaviour} />
-
-      <EditVentureActivity
-        activity={serialize({
-          _id: activity._id,
-          activityCode: activity.activityCode,
-          name: activity.name,
-          description: activity.description ?? '',
-          termId: activity.termId._id,
-          order: activity.order,
-          startDate: activity.startDate,
-          endDate: activity.endDate,
-          durationDays: activity.durationDays,
-          status: activity.status,
-        })}
-        terms={serialize(terms).map((t) => ({
-          _id: t._id,
-          name: t.name,
-          termNumber: t.termNumber,
-        }))}
-        supportActivities={serialize(allSupports).map((s) => ({
-          _id: s._id,
-          activityCode: s.activityCode,
-          name: s.name,
-        }))}
-        mappedSupportIds={mappedSupports.map((s) => s._id.toString())}
-      />
     </>
   );
 }
