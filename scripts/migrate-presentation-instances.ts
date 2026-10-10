@@ -36,6 +36,9 @@
  *   npm run migrate:presentations
  *
  * Pass `--dry` to report what it would change without writing anything.
+ *
+ * It also creates the notifications collection's indexes, which production
+ * does not build by itself.
  */
 import mongoose, { Types } from 'mongoose';
 import { config as loadEnv } from 'dotenv';
@@ -257,6 +260,12 @@ async function main() {
   }
 
   if (!dry) {
+    // Production does not build indexes on its own (autoIndex is off there),
+    // so the notifications collection gets its own here — including the TTL
+    // index that removes notifications after their retention period.
+    await models.Notification.createIndexes();
+    console.log('Notification indexes are in place.');
+
     const stageIndexes = await stages.indexes();
     if (stageIndexes.some((index) => index.name === 'feedbackForm.publishedFormId_1')) {
       await stages.dropIndex('feedbackForm.publishedFormId_1');
