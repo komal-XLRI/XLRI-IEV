@@ -8,6 +8,7 @@ import {
   Notification,
   PresentationParticipant,
   Review,
+  StageFeedbackEntry,
   StudentProfile,
   StudentSupportActivity,
   StudentVenture,
@@ -137,6 +138,7 @@ export async function deleteStudent(userId: string, confirmEmail: string): Promi
       { studentVentureId: { $in: ventureIds } },
       opts,
     ).exec();
+    await StageFeedbackEntry.deleteMany({ studentId: userId }, opts).exec();
     await Notification.deleteMany({ audience: 'USER', recipientId: userId }, opts).exec();
     await Notification.updateMany({ readBy: userId }, { $pull: { readBy: userId } }, opts).exec();
     await StudentProfile.deleteMany({ userId }, opts).exec();

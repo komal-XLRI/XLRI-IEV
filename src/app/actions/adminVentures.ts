@@ -43,6 +43,7 @@ import {
   saveBehaviourFeedback,
 } from '@/services/ventures/behaviourService';
 import { BEHAVIOUR_AREAS } from '@/lib/constants/behaviour';
+import { deleteStageFeedbackSheet } from '@/services/ventures/stageFeedbackSheetService';
 import {
   getFeedbackQr,
   regenerateFeedbackToken,
@@ -307,6 +308,23 @@ export async function deleteBehaviourFeedbackAction(
     await requireAdmin();
     await deleteBehaviourFeedback(objectId.parse(value(formData, 'studentVentureActivityId')));
     revalidateBehaviour();
+    return { deleted: true as const };
+  });
+}
+
+// ------------------------------------------------ Stage feedback sheets ----
+
+export async function deleteStageFeedbackSheetAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ deleted: true }>> {
+  return runAction(async () => {
+    await requireAdmin();
+    const ventureActivityId = await deleteStageFeedbackSheet(
+      objectId.parse(value(formData, 'sheetId')),
+    );
+    revalidatePath(`/admin/venture-activities/${ventureActivityId}`);
+    revalidatePath('/student', 'layout');
     return { deleted: true as const };
   });
 }

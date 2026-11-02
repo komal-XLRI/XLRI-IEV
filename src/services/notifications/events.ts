@@ -129,6 +129,24 @@ export async function behaviourFeedbackGiven(recordId: string, updated: boolean)
   });
 }
 
+// ------------------------------------------------- Stage feedback sheets ----
+
+export async function stageFeedbackSheetShared(
+  students: Array<{ studentId: string; recordId: string | null }>,
+  stageLabel: string,
+  title: string,
+) {
+  for (const student of students) {
+    await notifyUser(student.studentId, {
+      kind: 'feedback.sheet',
+      title: `${stageLabel}: feedback shared`,
+      body: `Your feedback from "${title}" is ready to read.`,
+      href: student.recordId ? studentStageHref(student.recordId) : '/student/timeline',
+      tone: 'info',
+    });
+  }
+}
+
 // ------------------------------------------------------------ Workshops ----
 
 export async function workshopPublished(workshop: {
