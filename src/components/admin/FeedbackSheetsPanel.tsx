@@ -86,7 +86,7 @@ function UploadForm({ ventureActivityId }: { ventureActivityId: string }) {
         label="Excel file"
         htmlFor="sheet-file"
         required
-        hint="Needs a Roll Number or Email column."
+        hint='Needs a student name column, e.g. "Student &amp; Startup Names", or a roll number.'
       >
         <input
           id="sheet-file"
@@ -174,7 +174,7 @@ export function FeedbackSheetsPanel({
     <Card className="mb-4">
       <CardHeader
         title="Feedback sheets"
-        description="Upload an Excel sheet of feedback. Each row is matched to a student by roll number or email, and each student sees only their own row on their stage page."
+        description='Upload an Excel sheet of feedback. Each row is matched to a student by name ("Name - Startup" works), roll number or student email. Each student sees only their own rows, one per evaluator, on their stage page. Evaluator email addresses are never shown to students.'
         icon={FileSpreadsheet}
         action={sheets.length > 0 ? <Badge tone="neutral">{sheets.length} uploaded</Badge> : null}
       />
@@ -228,7 +228,10 @@ export function FeedbackSheetsPanel({
                         <ul className="mt-1 space-y-0.5">
                           {sheet.unmatched.map((row) => (
                             <li key={row.line}>
-                              Row {row.line}: {row.identifier || '(no roll number or email)'}
+                              Row {row.line}: {row.identifier || '(blank)'}
+                              {row.reason ? (
+                                <span className="text-muted-foreground"> — {row.reason}</span>
+                              ) : null}
                             </li>
                           ))}
                         </ul>

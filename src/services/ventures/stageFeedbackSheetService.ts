@@ -14,7 +14,9 @@ import { NotFoundError, ValidationError } from '@/lib/errors';
 import { readImportUpload } from '@/lib/import/readUpload';
 import {
   FeedbackSheetFormatError,
+  nameKey,
   parseFeedbackSheet,
+  splitStudentCell,
 } from '@/lib/feedbackSheet/parseFeedbackSheet';
 import * as notify from '@/services/notifications/events';
 
@@ -26,7 +28,7 @@ export interface StageFeedbackSheetSummary {
   totalRows: number;
   matchedRows: number;
   matchedStudents: number;
-  unmatched: Array<{ line: number; identifier: string }>;
+  unmatched: Array<{ line: number; identifier: string; reason: string }>;
   uploadedAt: Date;
   uploadedByName: string | null;
   students: Array<{ studentId: string; name: string; rollNumber: string | null }>;
@@ -84,26 +86,42 @@ export async function uploadStageFeedbackSheet(input: {
 
   const byRoll = new Map(profiles.map((p) => [p.rollNumber.toUpperCase(), p.userId.toString()]));
   const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u._id.toString()]));
+  const resolveName = parsed.rows.some((row) => row.studentName)
+    ? await nameResolver()
+    : () => ({ studentId: null, reason: '' });
 
   const matched: Array<{
     studentId: string;
     line: number;
     fields: { label: string; value: string }[];
   }> = [];
-  const unmatched: Array<{ line: number; identifier: string }> = [];
+  const unmatched: Array<{ line: number; identifier: string; reason: string }> = [];
 
   for (const row of parsed.rows) {
-    const studentId =
+    let studentId =
       (row.rollNumber ? byRoll.get(row.rollNumber) : undefined) ??
-      (row.email ? byEmail.get(row.email) : undefined);
+      (row.email ? byEmail.get(row.email) : undefined) ??
+      null;
+    let reason = 'No student has this roll number or email';
+
+    if (!studentId && row.studentName) {
+      ({ studentId, reason } = resolveName(row.studentName));
+    }
 
     if (studentId) matched.push({ studentId, line: row.line, fields: row.fields });
-    else unmatched.push({ line: row.line, identifier: row.rollNumber ?? row.email ?? '' });
+    else {
+      unmatched.push({
+        line: row.line,
+        identifier: row.studentName ?? row.rollNumber ?? row.email ?? '',
+        reason:
+          row.studentName || row.rollNumber || row.email ? reason : 'The student cell is empty',
+      });
+    }
   }
 
   if (matched.length === 0) {
     throw new ValidationError(
-      `None of the ${parsed.rows.length} rows matched a student. Check the "${parsed.matchedOn}" column holds students' roll numbers or emails.`,
+      `None of the ${parsed.rows.length} rows matched a student. Check the "${parsed.matchedOn}" column holds students' names, roll numbers or emails.`,
     );
   }
 
@@ -171,7 +189,7 @@ async function summarise(
     totalRows: number;
     matchedRows: number;
     matchedStudents: number;
-    unmatched: Array<{ line: number; identifier: string }>;
+    unmatched: Array<{ line: number; identifier: string; reason?: string }>;
     createdAt: Date;
     uploadedBy: Types.ObjectId;
   }>,
@@ -218,7 +236,11 @@ async function summarise(
       totalRows: sheet.totalRows,
       matchedRows: sheet.matchedRows,
       matchedStudents: sheet.matchedStudents,
-      unmatched: sheet.unmatched.map((u) => ({ line: u.line, identifier: u.identifier })),
+      unmatched: sheet.unmatched.map((u) => ({
+        line: u.line,
+        identifier: u.identifier,
+        reason: u.reason ?? '',
+      })),
       uploadedAt: sheet.createdAt,
       uploadedByName: nameById.get(sheet.uploadedBy.toString()) ?? null,
       students: studentIds
@@ -230,6 +252,64 @@ async function summarise(
         .sort((a, b) => a.name.localeCompare(b.name)),
     };
   });
+}
+
+/**
+ * Matches a student cell such as "Kushagra Garg - Dhanush" to a student.
+ *
+ * The name is tried first. When two students share it, the startup name after
+ * the dash settles which one; when the name matches nobody — a typo, a
+ * nickname — the startup name alone is tried, since each startup belongs to
+ * one student. Anything still ambiguous is left unmatched rather than guessed:
+ * showing one student another's feedback is worse than showing none.
+ */
+async function nameResolver() {
+  const [students, ventures] = await Promise.all([
+    User.find({ role: 'STUDENT' }).select('_id name').lean().exec(),
+    StudentVenture.find().select('studentId ventureName').lean().exec(),
+  ]);
+
+  const byName = new Map<string, string[]>();
+  for (const student of students) {
+    const key = nameKey(student.name);
+    byName.set(key, [...(byName.get(key) ?? []), student._id.toString()]);
+  }
+  const byVenture = new Map<string, string[]>();
+  const ventureOf = new Map<string, string>();
+  for (const venture of ventures) {
+    const key = nameKey(venture.ventureName);
+    const studentId = venture.studentId.toString();
+    byVenture.set(key, [...(byVenture.get(key) ?? []), studentId]);
+    ventureOf.set(studentId, key);
+  }
+
+  return (cell: string): { studentId: string | null; reason: string } => {
+    const { name, venture } = splitStudentCell(cell);
+    const ventureKey = venture ? nameKey(venture) : null;
+    const named = byName.get(nameKey(name)) ?? byName.get(nameKey(cell)) ?? [];
+
+    if (named.length === 1) return { studentId: named[0]!, reason: '' };
+
+    if (named.length > 1) {
+      const narrowed = ventureKey ? named.filter((id) => ventureOf.get(id) === ventureKey) : [];
+      return narrowed.length === 1
+        ? { studentId: narrowed[0]!, reason: '' }
+        : {
+            studentId: null,
+            reason: `${named.length} students are called "${name}"; add the startup name after a dash to tell them apart`,
+          };
+    }
+
+    const byStartup = ventureKey ? (byVenture.get(ventureKey) ?? []) : [];
+    if (byStartup.length === 1) return { studentId: byStartup[0]!, reason: '' };
+
+    return {
+      studentId: null,
+      reason: venture
+        ? 'No student has this name, and no startup has this name'
+        : 'No student has this name',
+    };
+  };
 }
 
 /** Every sheet uploaded for a stage, newest first. */
@@ -260,6 +340,7 @@ export async function deleteStageFeedbackSheet(sheetId: string): Promise<string>
 
 export interface StudentSheetFeedback {
   entryId: string;
+  sheetId: string;
   sheetTitle: string;
   sharedAt: Date;
   fields: Array<{ label: string; value: string }>;
@@ -295,6 +376,7 @@ export async function getStudentSheetFeedback(
     return [
       {
         entryId: entry._id.toString(),
+        sheetId: entry.sheetId.toString(),
         sheetTitle: sheet.title,
         sharedAt: sheet.createdAt,
         fields: entry.fields.map((f) => ({ label: f.label, value: f.value })),

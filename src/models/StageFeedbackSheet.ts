@@ -12,8 +12,10 @@ import { registerModel } from './registerModel';
 export interface IStageFeedbackUnmatched {
   /** 1-based row number in the sheet. */
   line: number;
-  /** The roll number or email the row gave, as written. */
+  /** The student cell the row gave, as written. */
   identifier: string;
+  /** Why it matched nobody, for the administrator to fix. */
+  reason?: string;
 }
 
 export interface IStageFeedbackSheet {
@@ -44,7 +46,11 @@ const stageFeedbackSheetSchema = new Schema<IStageFeedbackSheet>(
     unmatched: {
       type: [
         new Schema<IStageFeedbackUnmatched>(
-          { line: { type: Number, required: true }, identifier: { type: String, default: '' } },
+          {
+            line: { type: Number, required: true },
+            identifier: { type: String, default: '' },
+            reason: { type: String, default: '' },
+          },
           { _id: false },
         ),
       ],
