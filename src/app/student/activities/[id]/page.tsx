@@ -24,6 +24,8 @@ import { BehaviourFeedbackCard } from '@/components/venture/BehaviourFeedbackCar
 import { getBehaviourFeedbackForRecord } from '@/services/ventures/behaviourService';
 import { getStudentMentorFeedback } from '@/services/ventures/mentorFeedbackService';
 import { MentorFeedbackEntries } from '@/components/venture/MentorFeedbackEntries';
+import { SheetFeedbackCard } from '@/components/venture/SheetFeedbackCard';
+import { getStudentSheetFeedback } from '@/services/ventures/stageFeedbackSheetService';
 import { durationInDays, formatDate, formatDateRange, windowState } from '@/lib/utils/dates';
 import { isValidObjectId } from '@/lib/utils/ids';
 
@@ -48,10 +50,12 @@ export default async function StudentActivityPage({ params }: { params: Promise<
 
   // Ownership was checked above; `id` is this student's own record, so the
   // feedback read below can only ever be theirs.
-  const [supports, behaviour, mentorFeedback] = await Promise.all([
+  const [supports, behaviour, mentorFeedback, sheetFeedback] = await Promise.all([
     getSupportActivitiesForVentureActivity(context.activity._id.toString()),
     getBehaviourFeedbackForRecord(id),
     getStudentMentorFeedback(id),
+    // The signed-in student's own id, so only their rows can come back.
+    getStudentSheetFeedback(user.userId, context.activity._id.toString()),
   ]);
 
   const start = context.activity.startDate;
@@ -274,6 +278,8 @@ export default async function StudentActivityPage({ params }: { params: Promise<
           )}
         </Card>
       ) : null}
+
+      <SheetFeedbackCard entries={sheetFeedback} />
 
       <div className="mt-5">
         <BehaviourFeedbackCard feedback={behaviour} />

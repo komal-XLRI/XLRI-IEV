@@ -6,7 +6,7 @@ import { Card, CardHeader, EmptyState } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/Modal';
-import { Field, Select, TextArea } from '@/components/ui/Field';
+import { Field, TextArea } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
 import { RecordDialog } from './RecordDialog';
 import {
@@ -21,13 +21,84 @@ import {
 } from '@/lib/constants/behaviour';
 import type { BehaviourRow } from '@/services/ventures/behaviourService';
 import { formatDate } from '@/lib/utils/dates';
+import { cn } from '@/lib/utils/cn';
 
-const RATINGS = [5, 4, 3, 2, 1] as const;
+const RATINGS = [1, 2, 3, 4, 5] as const;
 
 function averageTone(average: number) {
   if (average >= 4) return 'success' as const;
   if (average >= 3) return 'info' as const;
   return 'warning' as const;
+}
+
+/**
+ * One area's rating as five circles, 1 to 5, rather than a dropdown — every
+ * option is visible at once, and the meaning of the one chosen is spelt out
+ * under it. Native radio buttons underneath, so the keyboard (arrow keys) and
+ * the form's required check work as they would on any radio group.
+ */
+function RatingCircles({
+  id,
+  name,
+  label,
+  defaultValue,
+  error,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  defaultValue: number | null;
+  error?: string;
+}) {
+  const [value, setValue] = useState<number | null>(defaultValue);
+
+  return (
+    <fieldset className="space-y-1.5" aria-describedby={`${id}-meaning`}>
+      <legend className="text-sm font-medium">
+        {label}
+        <span className="text-danger-soft-foreground ml-0.5" aria-hidden="true">
+          *
+        </span>
+      </legend>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex items-center gap-2">
+          {RATINGS.map((rating) => (
+            <label key={rating} className="relative" title={BEHAVIOUR_RATING_LABELS[rating]}>
+              <input
+                type="radio"
+                name={name}
+                value={rating}
+                required
+                defaultChecked={defaultValue === rating}
+                onChange={() => setValue(rating)}
+                className="peer sr-only"
+              />
+              <span
+                className={cn(
+                  'border-input-border text-foreground flex size-9 cursor-pointer items-center justify-center rounded-full border text-sm font-semibold transition-colors',
+                  'hover:border-primary peer-focus-visible:ring-primary peer-focus-visible:ring-2 peer-focus-visible:ring-offset-2',
+                  'peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:border-primary',
+                )}
+              >
+                {rating}
+              </span>
+              <span className="sr-only">{BEHAVIOUR_RATING_LABELS[rating]}</span>
+            </label>
+          ))}
+        </div>
+        <span id={`${id}-meaning`} className="text-muted-foreground text-xs">
+          {value
+            ? BEHAVIOUR_RATING_LABELS[value]
+            : '1 = needs significant improvement · 5 = excellent'}
+        </span>
+      </div>
+      {error ? (
+        <p className="text-danger-soft-foreground text-xs" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </fieldset>
+  );
 }
 
 function FeedbackDialog({ row }: { row: BehaviourRow }) {
@@ -49,31 +120,16 @@ function FeedbackDialog({ row }: { row: BehaviourRow }) {
         <>
           <input type="hidden" name="studentVentureActivityId" value={row.recordId} />
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-4">
             {BEHAVIOUR_AREAS.map((area) => (
-              <Field
+              <RatingCircles
                 key={area.key}
+                id={`rating-${row.recordId}-${area.key}`}
+                name={`rating.${area.key}`}
                 label={area.label}
-                htmlFor={`rating-${row.recordId}-${area.key}`}
-                required
+                defaultValue={row.feedback?.ratings[area.key] ?? null}
                 error={fieldErrors?.[`ratings.${area.key}`]}
-              >
-                <Select
-                  id={`rating-${row.recordId}-${area.key}`}
-                  name={`rating.${area.key}`}
-                  required
-                  defaultValue={row.feedback ? String(row.feedback.ratings[area.key]) : ''}
-                >
-                  <option value="" disabled>
-                    Choose a rating
-                  </option>
-                  {RATINGS.map((value) => (
-                    <option key={value} value={value}>
-                      {value} — {BEHAVIOUR_RATING_LABELS[value]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              />
             ))}
           </div>
 
@@ -176,7 +232,12 @@ export function BehaviourPanel({ rows }: { rows: BehaviourRow[] }) {
                 </span>
               </span>
 
-              {row.feedback ? (
+              {row.feedback && row.feedback.missingAreas.length > 0 ? (
+                <Badge tone="warning">
+                  Re-rate: {row.feedback.missingAreas.length} area
+                  {row.feedback.missingAreas.length === 1 ? '' : 's'} not rated
+                </Badge>
+              ) : row.feedback && row.feedback.average !== null ? (
                 <Badge tone={averageTone(row.feedback.average)}>
                   Average {row.feedback.average.toFixed(1)} / 5
                 </Badge>

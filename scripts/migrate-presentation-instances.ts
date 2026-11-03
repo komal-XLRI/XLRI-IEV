@@ -266,6 +266,10 @@ async function main() {
     await models.Notification.createIndexes();
     console.log('Notification indexes are in place.');
 
+    await models.StageFeedbackSheet.createIndexes();
+    await models.StageFeedbackEntry.createIndexes();
+    console.log('Feedback sheet indexes are in place.');
+
     const stageIndexes = await stages.indexes();
     if (stageIndexes.some((index) => index.name === 'feedbackForm.publishedFormId_1')) {
       await stages.dropIndex('feedbackForm.publishedFormId_1');

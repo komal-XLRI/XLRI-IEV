@@ -61,3 +61,14 @@ export {
 export { VentureSubmission, type IVentureSubmission } from './VentureSubmission';
 export { Review, type IReview } from './Review';
 export { Evidence, type IEvidence } from './Evidence';
+
+export {
+  StageFeedbackSheet,
+  type IStageFeedbackSheet,
+  type IStageFeedbackUnmatched,
+} from './StageFeedbackSheet';
+export {
+  StageFeedbackEntry,
+  type IStageFeedbackEntry,
+  type IStageFeedbackField,
+} from './StageFeedbackEntry';

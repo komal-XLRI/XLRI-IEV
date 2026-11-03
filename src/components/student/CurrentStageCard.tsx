@@ -176,7 +176,7 @@ export function CurrentStageCard({ data }: { data: CurrentStageData }) {
         </Block>
 
         <Block icon={HeartHandshake} title="HR & behaviour">
-          {behaviour ? (
+          {behaviour && behaviour.average !== null ? (
             <p className="text-[13.5px]">
               <span className="font-medium tabular-nums">
                 {behaviour.average.toFixed(1)} / {BEHAVIOUR_RATING_MAX}

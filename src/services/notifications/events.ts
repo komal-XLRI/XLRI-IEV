@@ -96,16 +96,21 @@ export async function mentorFeedbackRejected(reason: string) {
   });
 }
 
-export async function stageCompleted(recordId: string) {
+export async function stageCompleted(recordId: string, byAdmin = false) {
   const [ctx] = await stageRecordContext([recordId]);
   if (!ctx) return;
   await notifyUser(ctx.studentId, {
     kind: 'stage.completed',
     title: `${ctx.stageLabel} complete`,
-    body: 'Your mentor feedback is in. Your next stage is now open on your timeline.',
+    body: byAdmin
+      ? 'Your programme office marked this stage complete. Your next stage is now open on your timeline.'
+      : 'Your mentor feedback is in. Your next stage is now open on your timeline.',
     href: '/student/timeline',
     tone: 'success',
   });
+  // An administrator who marked it knows already; telling every administrator
+  // once per student would bury the bell after a whole-cohort update.
+  if (byAdmin) return;
   await notifyAdmins({
     kind: 'stage.completed',
     title: `${ctx.studentName} completed ${ctx.stageLabel}`,
@@ -127,6 +132,24 @@ export async function behaviourFeedbackGiven(recordId: string, updated: boolean)
     href: studentStageHref(ctx.recordId),
     tone: 'info',
   });
+}
+
+// ------------------------------------------------- Stage feedback sheets ----
+
+export async function stageFeedbackSheetShared(
+  students: Array<{ studentId: string; recordId: string | null }>,
+  stageLabel: string,
+  title: string,
+) {
+  for (const student of students) {
+    await notifyUser(student.studentId, {
+      kind: 'feedback.sheet',
+      title: `${stageLabel}: feedback shared`,
+      body: `Your feedback from "${title}" is ready to read.`,
+      href: student.recordId ? studentStageHref(student.recordId) : '/student/timeline',
+      tone: 'info',
+    });
+  }
 }
 
 // ------------------------------------------------------------ Workshops ----

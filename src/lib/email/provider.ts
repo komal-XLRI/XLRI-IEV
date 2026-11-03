@@ -86,6 +86,21 @@ export function getEmailProvider(): EmailProvider {
   }
 }
 
+/**
+ * `.invalid` is reserved (RFC 2606) and can never receive mail. The test
+ * database copy masks students' addresses to it, so sending there is skipped
+ * rather than handed to a provider that may reject it and fail the request —
+ * an OTP request would then stop before the code step, and the master OTP
+ * could never be entered.
+ */
+function isUndeliverable(address: string): boolean {
+  return /\.invalid$/i.test(address.trim());
+}
+
 export async function sendEmail(message: EmailMessage): Promise<void> {
+  if (isUndeliverable(message.to)) {
+    logger.info('Email skipped: undeliverable test address', { subject: message.subject });
+    return;
+  }
   await getEmailProvider().send(message);
 }

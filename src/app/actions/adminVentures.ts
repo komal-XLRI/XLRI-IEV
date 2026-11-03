@@ -43,6 +43,8 @@ import {
   saveBehaviourFeedback,
 } from '@/services/ventures/behaviourService';
 import { BEHAVIOUR_AREAS } from '@/lib/constants/behaviour';
+import { deleteStageFeedbackSheet } from '@/services/ventures/stageFeedbackSheetService';
+import { markStageComplete, reopenStage } from '@/services/ventures/stageCompletionService';
 import {
   getFeedbackQr,
   regenerateFeedbackToken,
@@ -307,6 +309,59 @@ export async function deleteBehaviourFeedbackAction(
     await requireAdmin();
     await deleteBehaviourFeedback(objectId.parse(value(formData, 'studentVentureActivityId')));
     revalidateBehaviour();
+    return { deleted: true as const };
+  });
+}
+
+// ---------------------------------------------------- Stage completion ----
+
+function revalidateStageCompletion() {
+  revalidatePath('/admin/venture-activities', 'layout');
+  revalidatePath('/admin', 'layout');
+  revalidatePath('/student', 'layout');
+}
+
+export async function markStageCompleteAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ completed: number; alreadyComplete: number }>> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const ventureActivityId = objectId.parse(value(formData, 'ventureActivityId'));
+    const recordIds = values(formData, 'recordIds').map((id) => objectId.parse(id));
+    const result = await markStageComplete(ventureActivityId, recordIds, actor.userId);
+    revalidateStageCompletion();
+    return result;
+  });
+}
+
+export async function reopenStageAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ reopened: number; skipped: number }>> {
+  return runAction(async () => {
+    const actor = await requireAdmin();
+    const ventureActivityId = objectId.parse(value(formData, 'ventureActivityId'));
+    const recordIds = values(formData, 'recordIds').map((id) => objectId.parse(id));
+    const result = await reopenStage(ventureActivityId, recordIds, actor.userId);
+    revalidateStageCompletion();
+    return result;
+  });
+}
+
+// ------------------------------------------------ Stage feedback sheets ----
+
+export async function deleteStageFeedbackSheetAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<ActionResult<{ deleted: true }>> {
+  return runAction(async () => {
+    await requireAdmin();
+    const ventureActivityId = await deleteStageFeedbackSheet(
+      objectId.parse(value(formData, 'sheetId')),
+    );
+    revalidatePath(`/admin/venture-activities/${ventureActivityId}`);
+    revalidatePath('/student', 'layout');
     return { deleted: true as const };
   });
 }

@@ -11,6 +11,11 @@ import { getStageFeedback } from '@/services/ventures/mentorFeedbackService';
 import { AutoRefresh } from '@/components/layout/AutoRefresh';
 import { PresentationsPanel } from '@/components/admin/PresentationsPanel';
 import { isValidObjectId } from '@/lib/utils/ids';
+import { serialize } from '@/lib/utils/serialize';
+import { listStageFeedbackSheets } from '@/services/ventures/stageFeedbackSheetService';
+import { FeedbackSheetsPanel } from '@/components/admin/FeedbackSheetsPanel';
+import { listStageCompletion } from '@/services/ventures/stageCompletionService';
+import { StageCompletionPanel } from '@/components/admin/StageCompletionPanel';
 
 export const metadata: Metadata = { title: 'Venture activity' };
 export const dynamic = 'force-dynamic';
@@ -19,13 +24,16 @@ export default async function VentureActivityPage({ params }: { params: Promise<
   const { id } = await params;
   if (!isValidObjectId(id)) notFound();
 
-  const [activity, students, presentations, behaviour, feedback] = await Promise.all([
-    getVentureActivity(id),
-    listStageStudents(id),
-    listStagePresentations(id),
-    listBehaviourForActivity(id),
-    getStageFeedback(id),
-  ]);
+  const [activity, students, presentations, behaviour, feedback, sheets, completion] =
+    await Promise.all([
+      getVentureActivity(id),
+      listStageStudents(id),
+      listStagePresentations(id),
+      listBehaviourForActivity(id),
+      getStageFeedback(id),
+      listStageFeedbackSheets(id),
+      listStageCompletion(id),
+    ]);
 
   return (
     <>
@@ -70,6 +78,14 @@ export default async function VentureActivityPage({ params }: { params: Promise<
 
       {/* Mentor feedback arrives from Google, outside any request on this page. */}
       <AutoRefresh />
+
+      <StageCompletionPanel
+        ventureActivityId={id}
+        activityCode={activity.activityCode}
+        rows={serialize(completion)}
+      />
+
+      <FeedbackSheetsPanel ventureActivityId={id} sheets={serialize(sheets)} />
 
       <BehaviourPanel rows={behaviour} />
     </>

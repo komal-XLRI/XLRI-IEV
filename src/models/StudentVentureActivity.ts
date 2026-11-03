@@ -54,6 +54,11 @@ export interface IStudentVentureActivity {
 
   startedAt?: Date | null;
   completedAt?: Date | null;
+  /**
+   * The administrator who marked the stage complete by hand. Null when it
+   * completed on mentor feedback — and only a hand-marked stage can be reopened.
+   */
+  completedBy?: Types.ObjectId | null;
 
   createdAt: Date;
   updatedAt: Date;
@@ -94,6 +99,7 @@ const studentVentureActivitySchema = new Schema<IStudentVentureActivity>(
 
     startedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
+    completedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true, collection: 'studentventureactivities' },
 );

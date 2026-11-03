@@ -3,6 +3,8 @@ import type { Types } from 'mongoose';
 import { connectToDatabase } from '@/lib/db/mongoose';
 import {
   ActivitySupportMapping,
+  StageFeedbackEntry,
+  StageFeedbackSheet,
   StudentVentureActivity,
   SupportActivity,
   Term,
@@ -130,6 +132,8 @@ export async function deleteVentureActivity(activityId: string) {
   }
 
   await ActivitySupportMapping.deleteMany({ ventureActivityId: activityId }).exec();
+  await StageFeedbackEntry.deleteMany({ ventureActivityId: activityId }).exec();
+  await StageFeedbackSheet.deleteMany({ ventureActivityId: activityId }).exec();
   const result = await VentureActivity.deleteOne({ _id: activityId }).exec();
   if (result.deletedCount === 0) throw new NotFoundError('Venture activity not found');
 }

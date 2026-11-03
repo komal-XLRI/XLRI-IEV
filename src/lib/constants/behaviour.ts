@@ -7,11 +7,11 @@
  * is not tied to any support activity and does not gate stage completion.
  */
 export const BEHAVIOUR_AREAS = [
-  { key: 'teamwork', label: 'Teamwork & collaboration' },
+  { key: 'teamwork', label: 'Teamwork' },
   { key: 'communication', label: 'Communication' },
-  { key: 'discipline', label: 'Discipline & punctuality' },
-  { key: 'ownership', label: 'Ownership & initiative' },
-  { key: 'conduct', label: 'Professional conduct' },
+  { key: 'discipline', label: 'Discipline' },
+  { key: 'clarityOfThought', label: 'Clarity of thought' },
+  { key: 'actingOnFeedback', label: 'Ability to work on feedback' },
 ] as const;
 
 export type BehaviourArea = (typeof BEHAVIOUR_AREAS)[number]['key'];
@@ -32,8 +32,27 @@ export const BEHAVIOUR_RATING_LABELS: Record<number, string> = {
 export const BEHAVIOUR_REVIEW_GUIDELINE_MIN_DAYS = 15;
 export const BEHAVIOUR_REVIEW_GUIDELINE_MAX_DAYS = 20;
 
-/** Mean of the area ratings, to one decimal place. */
-export function averageBehaviourRating(ratings: BehaviourRatings): number {
-  const values = BEHAVIOUR_AREAS.map((area) => ratings[area.key]);
+function isRating(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= BEHAVIOUR_RATING_MIN &&
+    value <= BEHAVIOUR_RATING_MAX
+  );
+}
+
+/**
+ * Mean of the areas that carry a rating, to one decimal place; null when none
+ * do. Feedback saved before an area was added has no rating for it, and
+ * averaging over the gap is what produced "NaN".
+ */
+export function averageBehaviourRating(ratings: Partial<Record<string, unknown>>): number | null {
+  const values = BEHAVIOUR_AREAS.map((area) => ratings[area.key]).filter(isRating);
+  if (values.length === 0) return null;
   return Math.round((values.reduce((sum, v) => sum + v, 0) / values.length) * 10) / 10;
+}
+
+/** The areas this feedback has no rating for — it needs re-rating on those. */
+export function missingBehaviourAreas(ratings: Partial<Record<string, unknown>>): string[] {
+  return BEHAVIOUR_AREAS.filter((area) => !isRating(ratings[area.key])).map((area) => area.label);
 }
