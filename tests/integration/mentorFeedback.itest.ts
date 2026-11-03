@@ -332,6 +332,30 @@ describe('TEST 4 — different presentations use different forms', () => {
   });
 });
 
+describe('a student submitting feedback on themselves', () => {
+  it('is refused, from their own or any other student account, and nothing is stored', async () => {
+    for (const label of ['a', 'b']) {
+      const result = await svc.ingestGoogleFormFeedback(
+        payload({
+          token: tokenA1,
+          responseId: `${SUFFIX}-self-${label}`,
+          respondentEmail: email(label).toUpperCase(),
+        }),
+      );
+      expect(result).toMatchObject({
+        outcome: 'REJECTED',
+        reason: 'STUDENT_RESPONDENT',
+        status: 403,
+      });
+    }
+    expect(
+      await models.MentorFeedback.countDocuments({
+        googleResponseId: { $regex: `${SUFFIX}-self` },
+      }),
+    ).toBe(0);
+  });
+});
+
 describe('TEST 5 / 6 / 11 — ingestion, multiple mentors, duplicates, completion', () => {
   it('stores a response against the exact presentation and student, without the ID question', async () => {
     const result = await svc.ingestGoogleFormFeedback(
