@@ -127,7 +127,7 @@ function FeedbackDialog({ row }: { row: BehaviourRow }) {
                 id={`rating-${row.recordId}-${area.key}`}
                 name={`rating.${area.key}`}
                 label={area.label}
-                defaultValue={row.feedback ? row.feedback.ratings[area.key] : null}
+                defaultValue={row.feedback?.ratings[area.key] ?? null}
                 error={fieldErrors?.[`ratings.${area.key}`]}
               />
             ))}
@@ -232,7 +232,12 @@ export function BehaviourPanel({ rows }: { rows: BehaviourRow[] }) {
                 </span>
               </span>
 
-              {row.feedback ? (
+              {row.feedback && row.feedback.missingAreas.length > 0 ? (
+                <Badge tone="warning">
+                  Re-rate: {row.feedback.missingAreas.length} area
+                  {row.feedback.missingAreas.length === 1 ? '' : 's'} not rated
+                </Badge>
+              ) : row.feedback && row.feedback.average !== null ? (
                 <Badge tone={averageTone(row.feedback.average)}>
                   Average {row.feedback.average.toFixed(1)} / 5
                 </Badge>

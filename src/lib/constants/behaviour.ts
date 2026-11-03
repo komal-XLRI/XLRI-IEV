@@ -32,8 +32,27 @@ export const BEHAVIOUR_RATING_LABELS: Record<number, string> = {
 export const BEHAVIOUR_REVIEW_GUIDELINE_MIN_DAYS = 15;
 export const BEHAVIOUR_REVIEW_GUIDELINE_MAX_DAYS = 20;
 
-/** Mean of the area ratings, to one decimal place. */
-export function averageBehaviourRating(ratings: BehaviourRatings): number {
-  const values = BEHAVIOUR_AREAS.map((area) => ratings[area.key]);
+function isRating(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= BEHAVIOUR_RATING_MIN &&
+    value <= BEHAVIOUR_RATING_MAX
+  );
+}
+
+/**
+ * Mean of the areas that carry a rating, to one decimal place; null when none
+ * do. Feedback saved before an area was added has no rating for it, and
+ * averaging over the gap is what produced "NaN".
+ */
+export function averageBehaviourRating(ratings: Partial<Record<string, unknown>>): number | null {
+  const values = BEHAVIOUR_AREAS.map((area) => ratings[area.key]).filter(isRating);
+  if (values.length === 0) return null;
   return Math.round((values.reduce((sum, v) => sum + v, 0) / values.length) * 10) / 10;
+}
+
+/** The areas this feedback has no rating for — it needs re-rating on those. */
+export function missingBehaviourAreas(ratings: Partial<Record<string, unknown>>): string[] {
+  return BEHAVIOUR_AREAS.filter((area) => !isRating(ratings[area.key])).map((area) => area.label);
 }

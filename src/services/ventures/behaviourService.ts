@@ -3,15 +3,23 @@ import { Types } from 'mongoose';
 import { connectToDatabase } from '@/lib/db/mongoose';
 import { BehaviourFeedback, StudentVenture, StudentVentureActivity } from '@/models';
 import { NotFoundError } from '@/lib/errors';
-import { averageBehaviourRating, type BehaviourRatings } from '@/lib/constants/behaviour';
+import {
+  averageBehaviourRating,
+  missingBehaviourAreas,
+  type BehaviourRatings,
+} from '@/lib/constants/behaviour';
 import type { BehaviourFeedbackInput } from '@/validators/ventures';
 import { logger } from '@/lib/logger';
 import * as notify from '@/services/notifications/events';
 
 /** Client-safe HR & behaviour feedback. */
 export interface BehaviourFeedbackView {
-  ratings: BehaviourRatings;
-  average: number;
+  /** May lack an area that was added after this feedback was given. */
+  ratings: Partial<BehaviourRatings>;
+  /** Over the rated areas only; null when none are rated. */
+  average: number | null;
+  /** Labels of the areas with no rating — the feedback needs re-rating on these. */
+  missingAreas: string[];
   comments: string | null;
   givenAt: string;
   updatedAt: string;
@@ -29,6 +37,7 @@ function toView(doc: {
   return {
     ratings: doc.ratings,
     average: averageBehaviourRating(doc.ratings),
+    missingAreas: missingBehaviourAreas(doc.ratings),
     comments: doc.comments || null,
     givenAt: doc.givenAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),

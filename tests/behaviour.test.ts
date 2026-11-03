@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { averageBehaviourRating, BEHAVIOUR_AREAS } from '@/lib/constants/behaviour';
+import {
+  averageBehaviourRating,
+  BEHAVIOUR_AREAS,
+  missingBehaviourAreas,
+} from '@/lib/constants/behaviour';
 import { behaviourFeedbackSchema } from '@/validators/ventures';
 
 const id = 'aaaaaaaaaaaaaaaaaaaaaaaa';
@@ -52,5 +56,22 @@ describe('average behaviour rating', () => {
         actingOnFeedback: 5,
       }),
     ).toBe(4.2);
+  });
+});
+
+describe('feedback saved before the current areas', () => {
+  // Rated on the old areas: three carry over, two are new and have no rating.
+  const old = { teamwork: 4, communication: 3, discipline: 5, ownership: 2, conduct: 1 };
+
+  it('averages only the areas that have a rating, never NaN', () => {
+    expect(averageBehaviourRating(old)).toBe(4);
+    expect(averageBehaviourRating({})).toBeNull();
+  });
+
+  it('names the areas that still need a rating', () => {
+    expect(missingBehaviourAreas(old)).toEqual([
+      'Clarity of thought',
+      'Ability to work on feedback',
+    ]);
   });
 });

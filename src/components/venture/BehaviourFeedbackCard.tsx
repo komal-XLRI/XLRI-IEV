@@ -19,7 +19,9 @@ export function BehaviourFeedbackCard({ feedback }: { feedback: BehaviourFeedbac
         description="How you worked with people during this stage, from your programme office."
         icon={UsersRound}
         action={
-          feedback ? <Badge tone="info">Average {feedback.average.toFixed(1)} / 5</Badge> : null
+          feedback && feedback.average !== null ? (
+            <Badge tone="info">Average {feedback.average.toFixed(1)} / 5</Badge>
+          ) : null
         }
       />
 
@@ -27,27 +29,29 @@ export function BehaviourFeedbackCard({ feedback }: { feedback: BehaviourFeedbac
         <CardBody className="space-y-4">
           <ul className="space-y-2.5">
             {BEHAVIOUR_AREAS.map((area) => {
-              const value = feedback.ratings[area.key];
+              const value = feedback.ratings[area.key] ?? null;
               return (
                 <li key={area.key} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span className="min-w-44 flex-1 text-[13px] font-medium">{area.label}</span>
                   <span
                     className="flex items-center gap-1"
                     role="img"
-                    aria-label={`${value} out of ${BEHAVIOUR_RATING_MAX}`}
+                    aria-label={
+                      value === null ? 'Not rated' : `${value} out of ${BEHAVIOUR_RATING_MAX}`
+                    }
                   >
                     {Array.from({ length: BEHAVIOUR_RATING_MAX }, (_, index) => (
                       <span
                         key={index}
                         className={cn(
                           'h-1.5 w-5 rounded-full',
-                          index < value ? 'bg-chart-1' : 'bg-chart-track',
+                          value !== null && index < value ? 'bg-chart-1' : 'bg-chart-track',
                         )}
                       />
                     ))}
                   </span>
                   <span className="type-caption w-44 text-right">
-                    {value} · {BEHAVIOUR_RATING_LABELS[value]}
+                    {value === null ? 'Not rated' : `${value} · ${BEHAVIOUR_RATING_LABELS[value]}`}
                   </span>
                 </li>
               );
