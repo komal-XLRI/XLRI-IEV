@@ -96,16 +96,21 @@ export async function mentorFeedbackRejected(reason: string) {
   });
 }
 
-export async function stageCompleted(recordId: string) {
+export async function stageCompleted(recordId: string, byAdmin = false) {
   const [ctx] = await stageRecordContext([recordId]);
   if (!ctx) return;
   await notifyUser(ctx.studentId, {
     kind: 'stage.completed',
     title: `${ctx.stageLabel} complete`,
-    body: 'Your mentor feedback is in. Your next stage is now open on your timeline.',
+    body: byAdmin
+      ? 'Your programme office marked this stage complete. Your next stage is now open on your timeline.'
+      : 'Your mentor feedback is in. Your next stage is now open on your timeline.',
     href: '/student/timeline',
     tone: 'success',
   });
+  // An administrator who marked it knows already; telling every administrator
+  // once per student would bury the bell after a whole-cohort update.
+  if (byAdmin) return;
   await notifyAdmins({
     kind: 'stage.completed',
     title: `${ctx.studentName} completed ${ctx.stageLabel}`,
