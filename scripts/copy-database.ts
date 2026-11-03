@@ -16,6 +16,10 @@
  * rebuilt from the source, indexes included, and collections that exist only
  * in the target are dropped too. The source is only ever read.
  *
+ * `--keep-extra` leaves those target-only collections alone — test data for a
+ * feature production does not have yet, say. Every collection production has
+ * is still replaced.
+ *
  * `--mask-student-emails` rewrites every student's email to an address that
  * cannot receive mail, so nothing done on the test site (a workshop email, a
  * notification email) reaches a real student. Students are then signed in as
@@ -30,6 +34,7 @@ const BATCH = 1000;
 const args = new Set(process.argv.slice(2));
 const confirm = args.has('--confirm');
 const maskEmails = args.has('--mask-student-emails');
+const keepExtra = args.has('--keep-extra');
 
 /** Where a connection string points, without its credentials. */
 function describe(uri: string): { key: string; label: string } {
@@ -87,7 +92,12 @@ async function main() {
       console.log(`  ${name.padEnd(32)} ${String(count).padStart(7)} documents`);
     }
     if (extra.length > 0) {
-      console.log(`\n  Only in the test database, will be dropped: ${extra.join(', ')}`);
+      console.log(
+        keepExtra
+          ? `\n  Only in the test database, will be kept: ${extra.join(', ')}`
+          : `\n  Only in the test database, will be dropped: ${extra.join(', ')}` +
+              '\n  (add --keep-extra to keep them)',
+      );
     }
 
     if (!confirm) {
@@ -96,7 +106,7 @@ async function main() {
     }
 
     console.log('');
-    for (const name of extra) await targetDb.collection(name).drop();
+    if (!keepExtra) for (const name of extra) await targetDb.collection(name).drop();
 
     for (const name of sourceNames) {
       const from = sourceDb.collection(name);
