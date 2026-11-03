@@ -25,6 +25,9 @@ import { getBehaviourFeedbackForRecord } from '@/services/ventures/behaviourServ
 import { getStudentMentorFeedback } from '@/services/ventures/mentorFeedbackService';
 import { MentorFeedbackEntries } from '@/components/venture/MentorFeedbackEntries';
 import { SheetFeedbackCard } from '@/components/venture/SheetFeedbackCard';
+import { FeedbackQrCard } from '@/components/student/FeedbackQrCard';
+import { getFeedbackQr } from '@/services/ventures/mentorFeedbackService';
+import { publicBaseUrl } from '@/lib/feedback/baseUrl';
 import { getStudentSheetFeedback } from '@/services/ventures/stageFeedbackSheetService';
 import { durationInDays, formatDate, formatDateRange, windowState } from '@/lib/utils/dates';
 import { isValidObjectId } from '@/lib/utils/ids';
@@ -57,6 +60,27 @@ export default async function StudentActivityPage({ params }: { params: Promise<
     // The signed-in student's own id, so only their rows can come back.
     getStudentSheetFeedback(user.userId, context.activity._id.toString()),
   ]);
+
+  // The student's own QR for each presentation that is still on. Every
+  // participant here comes from this student's own record, read above.
+  const baseUrl = await publicBaseUrl();
+  const qrs = (
+    await Promise.all(
+      mentorFeedback.presentations
+        .filter((presentation) => presentation.status !== 'CANCELLED')
+        .map(async (presentation) => {
+          // A QR that cannot be produced is left off; the rest of the page stands.
+          const result = await getFeedbackQr(presentation.participantId, baseUrl).catch(() => null);
+          return result
+            ? {
+                participantId: presentation.participantId,
+                presentedOn: new Date(presentation.presentedOn).toISOString(),
+                result,
+              }
+            : null;
+        }),
+    )
+  ).filter((qr) => qr !== null);
 
   const start = context.activity.startDate;
   const end = context.activity.endDate;
@@ -97,6 +121,8 @@ export default async function StudentActivityPage({ params }: { params: Promise<
           </Link>
         }
       />
+
+      <FeedbackQrCard qrs={qrs} />
 
       {/* What this stage asks of the student, stated once at the top: present,
           then wait for feedback. */}

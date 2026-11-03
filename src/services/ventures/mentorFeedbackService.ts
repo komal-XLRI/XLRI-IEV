@@ -10,6 +10,7 @@ import {
   PresentationParticipant,
   StudentVenture,
   StudentVentureActivity,
+  User,
   VentureActivity,
   type FeedbackSyncOutcome,
   type IFeedbackFormConfig,
@@ -486,6 +487,20 @@ export async function ingestGoogleFormFeedback(
       409,
       'FORM_MISMATCH',
       'This response came from a form that is not the one configured for this presentation.',
+      ids,
+    );
+  }
+
+  // Students can see their own QR, so the link is in their hands too. A
+  // response sent from any student's account is not mentor feedback, and
+  // counting it would let a student complete their own stage.
+  const respondent = payload.respondentEmail?.trim().toLowerCase();
+  if (respondent && (await User.exists({ email: respondent, role: 'STUDENT' }))) {
+    return reject(
+      payload,
+      403,
+      'STUDENT_RESPONDENT',
+      'This response was submitted from a student account. Only mentors and faculty can give feedback.',
       ids,
     );
   }
