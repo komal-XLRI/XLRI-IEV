@@ -70,7 +70,9 @@ export default async function StudentActivityPage({ params }: { params: Promise<
         .filter((presentation) => presentation.status !== 'CANCELLED')
         .map(async (presentation) => {
           // A QR that cannot be produced is left off; the rest of the page stands.
-          const result = await getFeedbackQr(presentation.participantId, baseUrl).catch(() => null);
+          const result = await getFeedbackQr(presentation.participantId, baseUrl, {
+            forStudent: true,
+          }).catch(() => null);
           return result
             ? {
                 participantId: presentation.participantId,

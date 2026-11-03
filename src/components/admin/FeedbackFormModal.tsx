@@ -55,6 +55,7 @@ export function FeedbackFormModal({
     String(current?.requiredFeedbackCount ?? DEFAULT_REQUIRED_FEEDBACK_COUNT),
   );
   const [enabled, setEnabled] = useState(current?.enabled ?? true);
+  const [showQr, setShowQr] = useState(current?.showQrToStudents ?? true);
 
   function copyFrom(index: string) {
     const source = copySources[Number(index)];
@@ -63,6 +64,7 @@ export function FeedbackFormModal({
     setTemplate(source.form.prefillUrlTemplate);
     setRequired(String(source.form.requiredFeedbackCount));
     setEnabled(source.form.enabled);
+    setShowQr(source.form.showQrToStudents);
   }
 
   return (
@@ -193,13 +195,22 @@ export function FeedbackFormModal({
                   onChange={(event) => setRequired(event.target.value)}
                 />
               </Field>
-              <div className="sm:pt-7">
+              <div className="space-y-2 sm:pt-7">
                 <Checkbox
                   name="enabled"
                   label="Accept feedback for this presentation"
                   checked={enabled}
                   onChange={(event) => setEnabled(event.target.checked)}
                 />
+                <Checkbox
+                  name="showQrToStudents"
+                  label="Show the QR to students"
+                  checked={showQr}
+                  onChange={(event) => setShowQr(event.target.checked)}
+                />
+                <p className="type-caption pl-6">
+                  Off, students don’t see their QR; you can still show it from here.
+                </p>
               </div>
             </div>
 

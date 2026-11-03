@@ -234,6 +234,7 @@ export async function saveFeedbackFormConfigAction(
       title: submitted(formData, 'title'),
       prefillUrlTemplate: submitted(formData, 'prefillUrlTemplate') ?? '',
       enabled: formData.get('enabled') === 'on',
+      showQrToStudents: formData.get('showQrToStudents') === 'on',
       requiredFeedbackCount: value(formData, 'requiredFeedbackCount'),
     });
 
@@ -244,8 +245,8 @@ export async function saveFeedbackFormConfigAction(
 }
 
 /**
- * The QR for one student in one presentation. Admin only — students never
- * receive a QR. The service refuses unless that student's presentation is
+ * The QR for one student in one presentation. Admin only — a student sees
+ * their own on their stage page instead. The service refuses unless that student's presentation is
  * received and the stage has a usable form, whatever the page that asked
  * believed.
  */

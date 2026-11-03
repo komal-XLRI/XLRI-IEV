@@ -93,6 +93,7 @@ export async function saveFeedbackFormConfig(input: FeedbackFormConfigInput, adm
       prefillUrlTemplate: input.prefillUrlTemplate,
       publishedFormId: check.publishedFormId,
       enabled: input.enabled,
+      showQrToStudents: input.showQrToStudents,
       requiredFeedbackCount: input.requiredFeedbackCount,
       updatedBy: new Types.ObjectId(adminUserId),
       updatedAt: new Date(),
@@ -128,7 +129,8 @@ export type FeedbackQrResult =
     }
   | {
       available: false;
-      reason: 'PRESENTATION_PENDING' | 'PRESENTATION_CANCELLED' | 'NO_FORM';
+      reason:
+        'PRESENTATION_PENDING' | 'PRESENTATION_CANCELLED' | 'NO_FORM' | 'HIDDEN_FROM_STUDENTS';
       message: string;
       details: QrDetails;
     };
@@ -165,16 +167,18 @@ async function loadParticipantContext(participantId: string) {
 }
 
 /**
- * The QR for one student in one presentation — admin only, enforced by the
- * caller.
+ * The QR for one student in one presentation. Who may ask is enforced by the
+ * caller: an admin, or the student themselves with `forStudent`.
  *
  * Refuses (with a reason, not an error) unless that student's presentation is
  * received and the presentation has a usable form, so an unusable QR is never
- * produced. The token is issued here, lazily, the first time it is needed.
+ * produced. With `forStudent` it also refuses when the form hides the QR from
+ * students. The token is issued here, lazily, the first time it is needed.
  */
 export async function getFeedbackQr(
   participantId: string,
   baseUrl: string,
+  { forStudent = false }: { forStudent?: boolean } = {},
 ): Promise<FeedbackQrResult> {
   await connectToDatabase();
 
@@ -215,6 +219,14 @@ export async function getFeedbackQr(
       available: false,
       reason: 'NO_FORM',
       message: 'Feedback form is not configured for this presentation.',
+      details,
+    };
+  }
+  if (forStudent && form.showQrToStudents === false) {
+    return {
+      available: false,
+      reason: 'HIDDEN_FROM_STUDENTS',
+      message: 'The programme office shows this QR to mentors itself.',
       details,
     };
   }
@@ -751,6 +763,7 @@ export interface PresentationFormView {
   /** The plain form, without anything prefilled — for "View form". */
   viewUrl: string;
   enabled: boolean;
+  showQrToStudents: boolean;
   requiredFeedbackCount: number;
 }
 
@@ -789,6 +802,7 @@ export async function getStageFeedback(ventureActivityId: string): Promise<Stage
             prefillUrlTemplate: p.feedbackForm.prefillUrlTemplate,
             viewUrl: publishedFormUrl(p.feedbackForm.publishedFormId),
             enabled: p.feedbackForm.enabled,
+            showQrToStudents: p.feedbackForm.showQrToStudents !== false,
             requiredFeedbackCount: p.feedbackForm.requiredFeedbackCount,
           }
         : null,

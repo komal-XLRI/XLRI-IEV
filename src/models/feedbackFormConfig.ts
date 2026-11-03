@@ -12,6 +12,11 @@ export interface IFeedbackFormConfig {
   /** The `/forms/d/e/{id}` id, used to check a response came from this form. */
   publishedFormId: string;
   enabled: boolean;
+  /**
+   * Whether students see their own QR on their stage page. Off, only admins can
+   * show it. Missing on forms saved before the option existed, which read as on.
+   */
+  showQrToStudents?: boolean;
   /** Counted mentor responses a received student needs to complete the stage. */
   requiredFeedbackCount: number;
   updatedBy?: Types.ObjectId | null;
@@ -24,6 +29,7 @@ export const feedbackFormConfigSchema = new Schema<IFeedbackFormConfig>(
     prefillUrlTemplate: { type: String, required: true, trim: true },
     publishedFormId: { type: String, required: true, trim: true },
     enabled: { type: Boolean, required: true, default: true },
+    showQrToStudents: { type: Boolean, default: true },
     requiredFeedbackCount: { type: Number, required: true, min: 1, max: 10, default: 1 },
     updatedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     updatedAt: { type: Date, default: null },

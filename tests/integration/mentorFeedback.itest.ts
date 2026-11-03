@@ -198,6 +198,7 @@ beforeAll(async () => {
       title: 'Stage two form',
       prefillUrlTemplate: template(FORM_B),
       enabled: true,
+      showQrToStudents: true,
       requiredFeedbackCount: 1,
     },
     adminId,
@@ -274,6 +275,7 @@ describe('TEST 2 / 3 — received student with a configured form', () => {
         title: 'Stage one form',
         prefillUrlTemplate: template(FORM_A),
         enabled: true,
+        showQrToStudents: true,
         requiredFeedbackCount: 2,
       },
       adminId,
@@ -329,6 +331,47 @@ describe('TEST 4 — different presentations use different forms', () => {
       payload({ token: await qrToken(pA2), responseId: `${SUFFIX}-cross` }),
     );
     expect(result).toMatchObject({ outcome: 'REJECTED', reason: 'FORM_MISMATCH', status: 409 });
+  });
+});
+
+describe('hiding the QR from students', () => {
+  const formB = (showQrToStudents: boolean) =>
+    svc.saveFeedbackFormConfig(
+      {
+        presentationId: sitting2,
+        title: 'Stage two form',
+        prefillUrlTemplate: template(FORM_B),
+        enabled: true,
+        showQrToStudents,
+        requiredFeedbackCount: 1,
+      },
+      adminId,
+    );
+
+  it('shows the student their QR while the option is on', async () => {
+    const result = await svc.getFeedbackQr(pA2, BASE, { forStudent: true });
+    expect(result.available).toBe(true);
+  });
+
+  it('refuses the student but not the admin once it is off, and the QR keeps working', async () => {
+    await formB(false);
+    try {
+      const student = await svc.getFeedbackQr(pA2, BASE, { forStudent: true });
+      expect(student.available).toBe(false);
+      if (!student.available) {
+        expect(student.reason).toBe('HIDDEN_FROM_STUDENTS');
+        expect(JSON.stringify(student)).not.toContain('/feedback/');
+      }
+
+      const admin = await svc.getFeedbackQr(pA2, BASE);
+      expect(admin.available).toBe(true);
+      expect((await svc.resolveFeedbackLink(await qrToken(pA2))).ok).toBe(true);
+
+      const forms = (await svc.getStageFeedback(stage2Id)).forms;
+      expect(forms[sitting2]?.showQrToStudents).toBe(false);
+    } finally {
+      await formB(true);
+    }
   });
 });
 
@@ -473,6 +516,7 @@ describe('several presentations on one stage', () => {
         title: 'Re-presentation form',
         prefillUrlTemplate: template(FORM_A),
         enabled: true,
+        showQrToStudents: true,
         requiredFeedbackCount: 1,
       },
       adminId,
@@ -717,6 +761,7 @@ describe('TEST 12 — invalid and tampered tokens', () => {
         title: 'Stage one form',
         prefillUrlTemplate: template(FORM_A),
         enabled: false,
+        showQrToStudents: true,
         requiredFeedbackCount: 2,
       },
       adminId,

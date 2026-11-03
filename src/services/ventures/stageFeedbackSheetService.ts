@@ -359,7 +359,10 @@ export async function getStudentSheetFeedback(
   await connectToDatabase();
 
   const entries = await StageFeedbackEntry.find({ studentId, ventureActivityId })
-    .sort({ createdAt: -1, line: 1 })
+    // Newest sheet first (ids grow with time), then in sheet order. Not by the
+    // entry's own createdAt: rows saved together can differ by a millisecond,
+    // which reversed them.
+    .sort({ sheetId: -1, line: 1 })
     .lean()
     .exec();
   if (entries.length === 0) return [];

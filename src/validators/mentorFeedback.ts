@@ -28,6 +28,7 @@ export const feedbackFormConfigSchema = z
       .transform((v) => v || null),
     prefillUrlTemplate: z.string().trim().max(4000),
     enabled: z.boolean(),
+    showQrToStudents: z.boolean().default(true),
     requiredFeedbackCount: z.coerce
       .number()
       .int()

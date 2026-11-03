@@ -670,6 +670,9 @@ function PresentationFeedback({
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-[13.5px] font-medium">Mentor feedback</span>
             {form && !form.enabled ? <Badge tone="muted">Paused</Badge> : null}
+            {form && !form.showQrToStudents ? (
+              <Badge tone="muted">QR hidden from students</Badge>
+            ) : null}
           </span>
           {form ? (
             <span className="type-caption block">

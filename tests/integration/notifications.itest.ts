@@ -156,6 +156,7 @@ describe('a student through one stage', () => {
         title: `Form ${SUFFIX}`,
         prefillUrlTemplate: `https://docs.google.com/forms/d/e/${FORM}/viewform?usp=pp_url&entry.1=%7B%7BIEV_TOKEN%7D%7D`,
         enabled: true,
+        showQrToStudents: true,
         requiredFeedbackCount: 1,
       },
       adminId,
