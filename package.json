@@ -22,6 +22,7 @@
     "migrate:presentations": "tsx --tsconfig tsconfig.scripts.json scripts/migrate-presentation-instances.ts",
     "remove:orphan-venture": "tsx --tsconfig tsconfig.scripts.json scripts/remove-orphan-venture.ts",
     "remove:presentation": "tsx --tsconfig tsconfig.scripts.json scripts/remove-test-presentation.ts",
+    "copy:database": "tsx --tsconfig tsconfig.scripts.json scripts/copy-database.ts",
     "verify": "npm run typecheck && npm run lint && npm run test",
     "check:smtp": "tsx --tsconfig tsconfig.scripts.json scripts/check-smtp.ts"
   },
