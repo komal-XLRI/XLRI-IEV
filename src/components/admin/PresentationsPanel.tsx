@@ -284,7 +284,7 @@ export function PresentationsPanel({
       </CardBody>
 
       <PresentationFormModal
-        key={formFor === null ? 'closed' : formFor === 'new' ? 'new' : formFor.id}
+        key={`presentation-${formFor === null ? 'closed' : formFor === 'new' ? 'new' : formFor.id}`}
         open={formFor !== null}
         onClose={() => setFormFor(null)}
         ventureActivityId={ventureActivityId}
@@ -293,7 +293,7 @@ export function PresentationsPanel({
       />
 
       <FeedbackFormModal
-        key={formOf?.id ?? 'closed'}
+        key={`feedback-form-${formOf?.id ?? 'closed'}`}
         open={formOf !== null}
         onClose={() => setFormOf(null)}
         presentationId={formOf?.id ?? ''}
@@ -307,7 +307,7 @@ export function PresentationsPanel({
       />
 
       <FeedbackQrModal
-        key={qrFor?.participantId ?? 'closed'}
+        key={`qr-${qrFor?.participantId ?? 'closed'}`}
         participantId={qrFor?.participantId ?? null}
         studentName={qrFor?.studentName ?? ''}
         onClose={() => setQrFor(null)}
