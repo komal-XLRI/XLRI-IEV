@@ -202,7 +202,13 @@ describe('a student through one stage', () => {
     await saveBehaviourFeedback(
       {
         studentVentureActivityId: student.recordId,
-        ratings: { teamwork: 4, communication: 4, discipline: 4, ownership: 4, conduct: 4 },
+        ratings: {
+          teamwork: 4,
+          communication: 4,
+          discipline: 4,
+          clarityOfThought: 4,
+          actingOnFeedback: 4,
+        },
         comments: '',
       },
       adminId,

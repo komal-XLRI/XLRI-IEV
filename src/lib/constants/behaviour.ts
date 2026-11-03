@@ -7,11 +7,11 @@
  * is not tied to any support activity and does not gate stage completion.
  */
 export const BEHAVIOUR_AREAS = [
-  { key: 'teamwork', label: 'Teamwork & collaboration' },
+  { key: 'teamwork', label: 'Teamwork' },
   { key: 'communication', label: 'Communication' },
-  { key: 'discipline', label: 'Discipline & punctuality' },
-  { key: 'ownership', label: 'Ownership & initiative' },
-  { key: 'conduct', label: 'Professional conduct' },
+  { key: 'discipline', label: 'Discipline' },
+  { key: 'clarityOfThought', label: 'Clarity of thought' },
+  { key: 'actingOnFeedback', label: 'Ability to work on feedback' },
 ] as const;
 
 export type BehaviourArea = (typeof BEHAVIOUR_AREAS)[number]['key'];

@@ -23,7 +23,7 @@ describe('HR & behaviour feedback input', () => {
   });
 
   it('refuses a missing area', () => {
-    const { conduct: _dropped, ...partial } = allFours;
+    const { actingOnFeedback: _dropped, ...partial } = allFours;
     expect(
       behaviourFeedbackSchema.safeParse({ studentVentureActivityId: id, ratings: partial }).success,
     ).toBe(false);
@@ -48,8 +48,8 @@ describe('average behaviour rating', () => {
         teamwork: 5,
         communication: 4,
         discipline: 4,
-        ownership: 3,
-        conduct: 5,
+        clarityOfThought: 3,
+        actingOnFeedback: 5,
       }),
     ).toBe(4.2);
   });
