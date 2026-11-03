@@ -32,8 +32,7 @@ export interface VentureActivityView {
   mentorFeedback: { received: number; complete: number; configured: boolean };
   status: string;
   supportCodes: string[];
-  /** Cohort progress; null when no student has reached this activity yet. */
-  completed: number;
+  /** Students on this stage. */
   total: number;
   /** Attendance across every date a register has been taken on. */
   attendance: { present: number; absent: number; sessions: number; records: number };
@@ -177,23 +176,6 @@ export function VentureActivityCard({ activity }: { activity: VentureActivityVie
           )}
         </div>
 
-        {activity.total > 0 ? (
-          <div>
-            <div className="mb-1 flex items-baseline justify-between">
-              <span className="type-overline">Cohort completion</span>
-              <span className="type-caption tabular-nums">
-                {activity.completed}/{activity.total}
-              </span>
-            </div>
-            <MeterBar
-              value={activity.completed}
-              max={activity.total}
-              size="sm"
-              tone={activity.completed === activity.total ? 'success' : 'primary'}
-              label={`${activity.activityCode} completion`}
-            />
-          </div>
-        ) : null}
         {activity.attendance.records > 0 ? (
           <div>
             <div className="mb-1 flex items-baseline justify-between">

@@ -14,7 +14,6 @@ import {
   listVentureActivities,
   getSupportMappingIndex,
 } from '@/services/ventures/ventureActivityService';
-import { getActivityCompletionReport } from '@/services/reports/reportService';
 import { getAttendanceBoard } from '@/services/ventures/attendanceService';
 import {
   getPresentationCounts,
@@ -41,7 +40,6 @@ export default async function VentureActivitiesPage() {
     terms,
     supports,
     mappingIndex,
-    completion,
     attendance,
     tallies,
     behaviourTallies,
@@ -52,7 +50,6 @@ export default async function VentureActivitiesPage() {
     listTerms(),
     listSupportActivities(),
     getSupportMappingIndex(),
-    getActivityCompletionReport(),
     getAttendanceBoard(),
     getPresentationTallies(),
     getBehaviourTallies(),
@@ -61,13 +58,11 @@ export default async function VentureActivitiesPage() {
   ]);
 
   const supportCodeById = new Map(supports.map((s) => [s._id.toString(), s.activityCode]));
-  const completionByCode = new Map(completion.map((row) => [row.activityCode, row]));
   const attendanceById = new Map(attendance.rows.map((row) => [row._id, row]));
   const now = new Date();
 
   const views: VentureActivityView[] = activities.map((activity) => {
     const id = activity._id.toString();
-    const stats = completionByCode.get(activity.activityCode);
     const tally = tallies[id] ?? { total: 0, received: 0, completed: 0 };
 
     return {
@@ -88,8 +83,7 @@ export default async function VentureActivitiesPage() {
         .map((supportId) => supportCodeById.get(supportId))
         .filter((code): code is string => Boolean(code))
         .sort(),
-      completed: stats?.completed ?? 0,
-      total: stats?.total ?? 0,
+      total: tally.total,
       attendance: {
         present: attendanceById.get(id)?.present ?? 0,
         absent: attendanceById.get(id)?.absent ?? 0,
